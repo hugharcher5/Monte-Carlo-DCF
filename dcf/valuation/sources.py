@@ -178,7 +178,7 @@ def fetch_edgar(ticker: str) -> SourceData:
     the filings allow.  Working-capital items come from the latest fiscal-year
     balance sheet so they line up with annual revenue.
     """
-    HEADERS = {"User-Agent": "Archer Capital research@archercapital.dev"}
+    HEADERS = {"User-Agent": "Monte Carlo DCF research@archercapital.dev"}
 
     def _get(url: str):
         import gzip as _gzip

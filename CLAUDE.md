@@ -1,4 +1,4 @@
-# Archer Capital
+# Monte Carlo DCF
 
 A personal quantitative research and DCF valuation tool built in Python.
 

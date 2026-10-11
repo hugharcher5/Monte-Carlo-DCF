@@ -22,8 +22,8 @@ from valuation.sources       import fetch_yahoo, fetch_fmp, fetch_edgar
 from valuation.reconcile     import reconcile
 from valuation.analysts      import AnalystBenchmarks, fetch_benchmarks
 
-st.set_page_config(page_title="Archer Capital", layout="wide")
-st.title("Archer Capital")
+st.set_page_config(page_title="Monte Carlo DCF", layout="wide")
+st.title("Monte Carlo DCF")
 
 # The other research projects (Phase 3 registry, salmon, macro trading, private
 # competitor distress) are kept in the repo but no longer shown here, so the app

@@ -12,7 +12,7 @@ def _color(val, text):
 
 
 def main():
-    console.print("\n[bold white]Archer Capital — Portfolio Dashboard[/bold white]\n")
+    console.print("\n[bold white]Monte Carlo DCF — Portfolio Dashboard[/bold white]\n")
     console.print("Fetching prices...", end="\r")
 
     rows, totals = fetch_portfolio()
