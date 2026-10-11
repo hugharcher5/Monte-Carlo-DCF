@@ -4,6 +4,10 @@ comparison, plus SPY as the market benchmark.  Appends to
 dcf/data/price_history.csv (date, ticker, close); the "Analyst estimates" tab
 reads it to show how each stock has moved since the comparison was run.
 
+The tickers and starting prices come from dcf/data/tracking_verdicts.csv,
+which froze each stock's verdict on the start date, so rerunning the model
+later never changes what is being tracked.
+
 Run weekly by .github/workflows/track_prices.yml.  The first run also writes
 the comparison's own prices as the starting row, so returns are measured from
 the date the DCF and analyst verdicts were recorded.
@@ -14,6 +18,7 @@ import pandas as pd
 import yfinance as yf
 
 REPO = Path(__file__).resolve().parent.parent
+VERDICTS = REPO / "dcf" / "data" / "tracking_verdicts.csv"
 BENCHMARK = REPO / "dcf" / "data" / "analyst_benchmark.csv"
 HISTORY = REPO / "dcf" / "data" / "price_history.csv"
 MARKET = "SPY"
@@ -25,14 +30,17 @@ def _closes(tickers: list[str], **kw) -> pd.DataFrame:
 
 
 def main() -> None:
+    frozen = pd.read_csv(VERDICTS)
+    # Every stock in the original comparison is priced, including the few the model
+    # could not value, so the record stays complete.
     bench = pd.read_csv(BENCHMARK)
-    tickers = bench["ticker"].tolist() + [MARKET]
+    tickers = sorted(set(frozen["ticker"]) | set(bench["ticker"])) + [MARKET]
 
     if HISTORY.exists():
         hist = pd.read_csv(HISTORY)
     else:
-        run_date = str(bench["run_date"].iloc[0])
-        start = bench.dropna(subset=["price"])[["ticker", "price"]].rename(columns={"price": "close"})
+        run_date = str(frozen["start_date"].iloc[0])
+        start = frozen[["ticker", "start_price"]].rename(columns={"start_price": "close"})
         start.insert(0, "date", run_date)
         # SPY's starting price: its last close on or before the comparison date
         end = (pd.Timestamp(run_date) + pd.Timedelta(days=1)).date().isoformat()

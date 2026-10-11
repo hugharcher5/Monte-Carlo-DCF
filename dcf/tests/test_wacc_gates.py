@@ -54,3 +54,8 @@ def test_flags_far_from_price_and_negative_p10():
     assert any("10x" not in f and "0.1x" in f for f in flags)
     assert any("negative" in f for f in flags)
     assert output_flags(100.0, 60.0, 110.0, 0.5, True, "USD", False) == []
+
+
+def test_flag_when_wacc_close_to_terminal_growth():
+    flags = output_flags(100.0, 60.0, 110.0, 0.5, True, "JPY", False, 0.040, 0.025)
+    assert len(flags) == 1 and "less than 2 points" in flags[0]

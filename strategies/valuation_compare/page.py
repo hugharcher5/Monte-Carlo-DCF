@@ -82,7 +82,7 @@ def _render_s22_group(expanded: bool = False) -> None:
                 "DSR thresh":   v["dsr_threshold"],
                 "Coverage":     v["coverage"],
             })
-        st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(comp_rows), width='stretch', hide_index=True)
 
         st.divider()
 
@@ -204,7 +204,7 @@ def render_valuation_compare_page() -> None:
          "Variable": "Bid-ask spread of 0.2% to 1% a trade depending on company size, on every trade"},
         {"Type": "Constant: stocks compared",
          "Variable": "In the fair run, only stocks all four signals can value that quarter"},
-    ]), hide_index=True, use_container_width=True)
+    ]), hide_index=True, width='stretch')
 
     st.markdown(
         "**Method.**\n"
@@ -248,7 +248,7 @@ def render_valuation_compare_page() -> None:
          "Stocks scored by all four (fair run)": f"{fair[s]['n_universe'].mean():.0f}",
          "Stocks held (fair run)": f"{fair[s]['n_long'].mean():.0f}"}
         for s, label, _ in _SIGNALS
-    ]), hide_index=True, use_container_width=True)
+    ]), hide_index=True, width='stretch')
     st.caption("825 different companies passed through the universe over the 24 quarters.")
 
     st.markdown("**Results**")
@@ -271,11 +271,11 @@ def render_valuation_compare_page() -> None:
     fig.update_layout(title="Growth of $1, same stocks for every signal, after costs",
                       yaxis_title="Value of $1", height=420, margin=dict(t=50, b=40),
                       legend=dict(orientation="h", yanchor="top", y=-0.12))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     st.dataframe(pd.DataFrame(
         [{"Signal": f"{label} (after costs)", **_metrics(fair[s])} for s, label, _ in _SIGNALS]
         + [{"Signal": "Whole universe, equal weight (before costs)", **_metrics(fair["dcf"], "mkt_ret")}]
-    ), hide_index=True, use_container_width=True)
+    ), hide_index=True, width='stretch')
     st.caption(
         "Calmar ratio = return a year ÷ worst fall. The whole universe holds all ~422 stocks "
         "equally with no trading costs, so it ranks nothing and is a slightly generous benchmark."
@@ -305,4 +305,4 @@ def render_valuation_compare_page() -> None:
             "made the differences disappear, which is why the fair run above is the result."
         )
         st.dataframe(pd.DataFrame([{"Signal": label, **_metrics(first[s])} for s, label, _ in _SIGNALS]),
-                     hide_index=True, use_container_width=True)
+                     hide_index=True, width='stretch')

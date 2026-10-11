@@ -102,3 +102,15 @@ def test_foreign_company_uses_local_rate():
                       light=True)
     assert r.wacc_result.rf == pytest.approx(0.010)
     assert r.wacc_result.rf_is_local
+
+
+def test_correlations_change_the_range_only_modestly():
+    """Shown in the app's methodology: the estimated correlations widen the
+    P10-P90 range a little and barely move the median."""
+    base = make_assumptions(revenue_growth=0.10)
+    b = simulation_bounds(base, fi(revenue_growth_sd=0.08, margin_sd=0.04), (0.025, 0.015, 0.035), 0.012)
+    with_c, _, _ = simulate(base, b, correlation_matrix(), 20_000, np.random.default_rng(3))
+    without, _, _ = simulate(base, b, np.eye(5), 20_000, np.random.default_rng(3))
+    w = lambda s: np.subtract(*np.percentile(s, [90, 10]))
+    assert 1.0 < w(with_c) / w(without) < 1.15
+    assert abs(np.median(with_c) / np.median(without) - 1) < 0.02

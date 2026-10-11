@@ -27,12 +27,20 @@ def check_not_financial(ticker: str, sector: str, industry: str) -> None:
 
 
 FAR_FROM_PRICE: float = 5.0   # flag outputs more than 5x above or below the price
+THIN_SPREAD: float = 0.02     # flag when WACC is less than 2 points above terminal growth
 
 
 def output_flags(price: float, p10: float, p50: float, stub: float, rf_is_local: bool,
-                 currency: str, unproven: bool) -> list[str]:
+                 currency: str, unproven: bool, wacc: float = float("nan"),
+                 terminal_g: float = float("nan")) -> list[str]:
     """Plain-English warnings attached to a finished valuation."""
     flags = []
+    if math.isfinite(wacc) and math.isfinite(terminal_g) and wacc - terminal_g < THIN_SPREAD:
+        flags.append(
+            f"WACC ({wacc:.1%}) is less than 2 points above terminal growth ({terminal_g:.1%}). "
+            "The terminal value is then very sensitive to small changes in either, so the "
+            "range is much less reliable than usual. A low WACC usually comes from a low local "
+            "bond yield or a large share of cheap debt (for example a car maker's finance arm).")
     if price > 0 and math.isfinite(p50) and p50 > 0:
         ratio = p50 / price
         if ratio > FAR_FROM_PRICE or ratio < 1.0 / FAR_FROM_PRICE:

@@ -6,9 +6,13 @@ the "Analyst estimates" tab of the app reads.
     venv/bin/python scripts/benchmark_vs_analysts.py            # full run
     venv/bin/python scripts/benchmark_vs_analysts.py --no-fmp   # keep FMP values from the last CSV
 
-Reconciles Yahoo and SEC EDGAR only.  FMP's free plan allows 250 calls a day
-and covers only some symbols, so the run spends one FMP call per ticker on its
-DCF rather than three on financial statements.
+Each stock goes through the same pipeline as the app (valuation.pipeline), with
+one difference: FMP's free plan allows 250 calls a day and covers only some
+symbols, so financial statements come from Yahoo and SEC EDGAR only, and the
+run spends at most one FMP call per ticker, on FMP's own DCF.
+
+The verdicts used by the weekly price tracking are frozen separately in
+dcf/data/tracking_verdicts.csv, so rerunning this script never changes them.
 """
 import argparse
 import contextlib
@@ -25,6 +29,7 @@ import pandas as pd
 REPO = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(REPO), str(REPO / "dcf")]
 OUT = REPO / "dcf" / "data" / "analyst_benchmark.csv"
+N_SIMS = 3_000
 
 TICKERS = """
 AAPL MSFT NVDA GOOGL AMZN META TSLA AVGO ORCL ADBE CRM AMD INTC CSCO IBM QCOM TXN
@@ -44,32 +49,26 @@ ADP INTU NOW PANW CMG ORLY AZO ISRG
 
 def value_one(args) -> dict:
     ticker, use_fmp = args
-    from valuation.sources import fetch_yahoo, fetch_edgar
-    from valuation.reconcile import reconcile
-    from valuation.montecarlo import run_valuation
+    from valuation.pipeline import value_ticker
+    from valuation.gates import NotApplicable
     from valuation.analysts import analyst_targets, fmp_dcf
 
     row = {"ticker": ticker}
     try:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            sources = []
-            for fetch in (fetch_yahoo, fetch_edgar):
-                try:
-                    sources.append(fetch(ticker))
-                except Exception:
-                    pass
-            if len(sources) >= 2:
-                rr = reconcile(sources)
-                r = run_valuation(ticker, n_sims=3000, sigma_cross=rr.sigma_cross, reconcile_result=rr)
-            else:
-                r = run_valuation(ticker, n_sims=3000)
+            r, _ = value_ticker(ticker, n_sims=N_SIMS, use_fmp=False)
         row.update(price=r.current_price_usd)
         if r.dcf_applicable:
+            g = r.implied.get("revenue_growth")
             row.update(status="valued", p10=r.p10, p50=r.p50, p90=r.p90,
+                       pct_above_price=r.pct_undervalued, model_growth=r.assumptions.revenue_growth,
+                       implied_growth=g, flags=len(r.flags),
                        note="unproven company" if r.unproven else "")
         else:
             row.update(status="not applicable", note="terminal-year free cash flow is negative")
-    except Exception as e:
+    except NotApplicable:
+        row.update(status="not applicable", note="bank, insurer or broker: FCFF DCF does not apply")
+    except Exception as e:      # keep going: one bad ticker must not stop a 100-stock run
         row.update(status="failed", note=str(e).split(". ")[0][:160])
 
     for _ in range(3):   # Yahoo occasionally returns an empty frame under load
@@ -112,10 +111,16 @@ def main() -> None:
     if args.no_fmp and OUT.exists():
         df["fmp_dcf"] = pd.read_csv(OUT).set_index("ticker")["fmp_dcf"].reindex(df.index)
     df["run_date"] = date.today().isoformat()
-    cols = ["price", "p10", "p50", "p90", "analyst_mean", "analyst_median", "analyst_sd",
-            "analyst_n", "fmp_dcf", "status", "note", "run_date"]
+    cols = ["price", "p10", "p50", "p90", "pct_above_price", "model_growth", "implied_growth",
+            "analyst_mean", "analyst_median", "analyst_sd", "analyst_n", "fmp_dcf", "flags",
+            "status", "note", "run_date"]
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    df.reindex(columns=cols).round(2).rename_axis("ticker").to_csv(OUT)
+    df = df.reindex(columns=cols)
+    df[["model_growth", "implied_growth"]] = df[["model_growth", "implied_growth"]].round(4)
+    money = ["price", "p10", "p50", "p90", "pct_above_price", "analyst_mean", "analyst_median",
+             "analyst_sd", "fmp_dcf"]
+    df[money] = df[money].round(2)
+    df.rename_axis("ticker").to_csv(OUT)
     print(f"wrote {OUT} ({(df['status'] == 'valued').sum()} valued)")
 
 

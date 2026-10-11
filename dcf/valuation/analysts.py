@@ -61,11 +61,18 @@ def fmp_dcf(ticker: str) -> float | None:
     key = os.getenv("FMP_API_KEY", "").strip()
     if not key:
         return None
-    r = requests.get(
-        "https://financialmodelingprep.com/stable/discounted-cash-flow",
-        params={"symbol": ticker, "apikey": key}, timeout=20,
-    )
-    r.raise_for_status()
+    try:
+        r = requests.get(
+            "https://financialmodelingprep.com/stable/discounted-cash-flow",
+            params={"symbol": ticker, "apikey": key}, timeout=20,
+        )
+    except requests.RequestException as e:
+        raise RuntimeError(f"FMP request failed ({type(e).__name__})") from None
+    # Never pass on requests' own error text: it contains the URL, and so the API key.
+    if r.status_code == 402:
+        raise RuntimeError("FMP's free plan does not cover this symbol")
+    if not r.ok:
+        raise RuntimeError(f"FMP returned HTTP {r.status_code}")
     rows = r.json()
     if isinstance(rows, list) and rows and rows[0].get("dcf") is not None:
         return float(rows[0]["dcf"])
@@ -80,6 +87,6 @@ def fetch_benchmarks(ticker: str) -> AnalystBenchmarks:
         out.errors["Yahoo analyst targets"] = str(e)
     try:
         out.fmp_dcf = fmp_dcf(ticker)
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         out.errors["FMP DCF"] = str(e)
     return out

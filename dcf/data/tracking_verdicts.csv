@@ -1,0 +1,94 @@
+ticker,start_date,start_price,our_p10,our_p50,our_p90,analyst_mean,verdict
+AAPL,2026-10-11,336.64,71.94,100.73,152.62,334.95,Overvalued by both
+MSFT,2026-10-11,535.07,192.81,258.97,332.55,574.67,Undervalued by analysts only
+NVDA,2026-10-11,229.28,54.56,84.29,108.35,329.78,Undervalued by analysts only
+GOOGL,2026-10-11,351.66,68.68,112.64,171.22,414.95,Undervalued by analysts only
+AMZN,2026-10-11,262.43,-3.07,48.22,108.9,326.51,Undervalued by analysts only
+META,2026-10-11,718.67,104.73,317.16,582.94,799.34,Undervalued by analysts only
+TSLA,2026-10-11,382.7,3.74,36.79,129.0,422.53,Undervalued by analysts only
+AVGO,2026-10-11,361.54,65.42,175.96,406.26,515.29,Undervalued by analysts only
+ORCL,2026-10-11,141.4,34.98,69.24,100.91,254.16,Undervalued by analysts only
+ADBE,2026-10-11,242.27,226.34,284.9,364.22,279.25,Undervalued by both
+CRM,2026-10-11,229.13,82.11,156.91,244.34,282.29,Undervalued by analysts only
+AMD,2026-10-11,608.1,23.54,61.5,172.39,576.67,Overvalued by both
+INTC,2026-10-11,104.7,-4.25,1.98,11.1,104.61,Overvalued by both
+CSCO,2026-10-11,118.39,34.64,54.31,81.13,130.25,Undervalued by analysts only
+IBM,2026-10-11,227.13,139.64,221.15,322.81,255.78,Undervalued by analysts only
+QCOM,2026-10-11,175.5,68.16,141.71,274.24,191.48,Undervalued by analysts only
+TXN,2026-10-11,283.74,12.53,48.19,103.17,322.17,Undervalued by analysts only
+KO,2026-10-11,88.05,22.32,44.81,79.46,93.07,Undervalued by analysts only
+PEP,2026-10-11,125.97,49.95,87.44,141.7,145.06,Undervalued by analysts only
+PG,2026-10-11,151.23,88.84,113.85,146.14,162.5,Undervalued by analysts only
+WMT,2026-10-11,111.35,15.86,35.82,58.7,131.93,Undervalued by analysts only
+COST,2026-10-11,946.92,178.98,319.73,481.44,1083.43,Undervalued by analysts only
+MCD,2026-10-11,235.23,129.62,226.09,413.23,304.52,Undervalued by analysts only
+NKE,2026-10-11,34.71,17.16,27.45,40.02,40.96,Undervalued by analysts only
+SBUX,2026-10-11,90.75,18.74,49.14,92.56,108.62,Undervalued by analysts only
+HD,2026-10-11,290.74,159.02,221.49,298.98,386.09,Undervalued by analysts only
+LOW,2026-10-11,186.0,65.06,110.42,167.58,259.04,Undervalued by analysts only
+TGT,2026-10-11,153.64,9.41,66.4,123.29,150.29,Overvalued by both
+DIS,2026-10-11,108.05,44.63,94.87,169.0,127.93,Undervalued by analysts only
+NFLX,2026-10-11,70.3,70.58,94.7,125.34,96.57,Undervalued by both
+JNJ,2026-10-11,261.44,161.06,249.88,353.44,270.11,Undervalued by analysts only
+PFE,2026-10-11,28.28,-2.69,6.99,25.13,29.4,Undervalued by analysts only
+MRK,2026-10-11,145.6,51.76,104.02,169.05,153.77,Undervalued by analysts only
+ABBV,2026-10-11,276.47,66.39,137.17,229.58,285.41,Undervalued by analysts only
+LLY,2026-10-11,1179.27,475.57,1278.05,2669.2,1339.3,Undervalued by both
+UNH,2026-10-11,379.3,397.5,761.5,1315.43,453.43,Undervalued by both
+AMGN,2026-10-11,414.87,270.42,517.34,933.87,401.56,Undervalued by our DCF only
+TMO,2026-10-11,658.02,189.62,251.08,325.51,639.71,Overvalued by both
+ABT,2026-10-11,99.6,34.94,58.22,93.43,123.62,Undervalued by analysts only
+CAT,2026-10-11,800.47,179.8,280.85,420.3,970.8,Undervalued by analysts only
+DE,2026-10-11,620.93,259.02,354.26,482.93,688.91,Undervalued by analysts only
+BA,2026-10-11,190.37,-95.84,85.88,501.73,274.25,Undervalued by analysts only
+GE,2026-10-11,308.2,114.65,249.95,444.45,396.38,Undervalued by analysts only
+HON,2026-10-11,207.73,187.5,314.96,487.87,259.29,Undervalued by both
+UPS,2026-10-11,94.57,31.64,68.31,122.2,115.8,Undervalued by analysts only
+LMT,2026-10-11,509.59,412.19,693.6,1197.13,614.36,Undervalued by both
+MMM,2026-10-11,159.96,-3.25,47.86,109.81,179.5,Undervalued by analysts only
+UNP,2026-10-11,278.34,69.95,135.49,238.6,327.0,Undervalued by analysts only
+XOM,2026-10-11,168.94,51.75,78.51,115.56,170.83,Undervalued by analysts only
+CVX,2026-10-11,211.98,54.4,80.22,117.38,210.25,Overvalued by both
+COP,2026-10-11,134.1,38.52,73.27,137.82,138.26,Undervalued by analysts only
+SLB,2026-10-11,48.95,35.1,61.96,102.51,61.37,Undervalued by both
+OXY,2026-10-11,60.11,6.02,14.96,30.49,66.39,Undervalued by analysts only
+LIN,2026-10-11,483.73,82.11,182.3,326.52,544.75,Undervalued by analysts only
+NEE,2026-10-11,77.38,-24.36,31.44,134.25,94.86,Undervalued by analysts only
+SO,2026-10-11,86.17,-60.3,19.91,141.95,99.09,Undervalued by analysts only
+NEM,2026-10-11,117.84,63.26,309.95,1229.25,142.55,Undervalued by both
+FCX,2026-10-11,73.69,10.17,23.88,41.43,73.93,Undervalued by analysts only
+T,2026-10-11,22.18,-8.73,15.56,48.32,28.86,Undervalued by analysts only
+VZ,2026-10-11,41.65,15.78,56.4,112.23,50.31,Undervalued by both
+TMUS,2026-10-11,148.58,145.13,289.06,469.25,241.68,Undervalued by both
+V,2026-10-11,385.45,193.43,229.83,274.41,415.73,Undervalued by analysts only
+MA,2026-10-11,589.14,161.78,304.85,562.53,665.68,Undervalued by analysts only
+BRK-B,2026-10-11,515.62,426.26,848.53,1382.74,604.0,Undervalued by both
+ETSY,2026-10-11,76.71,19.87,37.76,57.85,83.68,Undervalued by analysts only
+ROKU,2026-10-11,152.85,27.27,74.14,141.97,155.5,Undervalued by analysts only
+PLTR,2026-10-11,209.05,0.32,5.37,19.7,208.95,Overvalued by both
+SNOW,2026-10-11,368.89,64.69,132.95,292.84,402.62,Undervalued by analysts only
+UBER,2026-10-11,71.51,-0.7,62.99,234.08,105.06,Undervalued by analysts only
+ABNB,2026-10-11,165.87,48.02,109.19,250.19,182.36,Undervalued by analysts only
+DOCU,2026-10-11,71.08,11.1,20.53,30.36,69.43,Overvalued by both
+ZM,2026-10-11,97.74,18.23,34.28,56.94,111.84,Undervalued by analysts only
+CROX,2026-10-11,114.98,40.96,125.05,232.18,132.89,Undervalued by both
+DECK,2026-10-11,82.89,97.49,123.25,152.14,114.12,Undervalued by both
+POOL,2026-10-11,159.54,92.08,176.32,309.32,239.56,Undervalued by both
+ASML,2026-10-11,1780.34,238.53,593.92,1377.15,2047.57,Undervalued by analysts only
+TSM,2026-10-11,453.31,67.21,244.99,527.52,511.56,Undervalued by analysts only
+NVO,2026-10-11,38.64,39.97,132.78,362.99,50.12,Undervalued by both
+SAP,2026-10-11,214.78,73.71,122.51,188.49,276.4,Undervalued by analysts only
+TM,2026-10-11,185.3,-0.5,354.66,786.01,221.0,Undervalued by both
+SONY,2026-10-11,24.12,23.33,31.71,44.32,22.0,Undervalued by our DCF only
+BABA,2026-10-11,111.37,59.12,118.58,187.91,192.5,Undervalued by both
+SHOP,2026-10-11,170.85,-9.78,5.01,24.09,173.86,Undervalued by analysts only
+UL,2026-10-11,62.26,13.09,24.29,40.65,71.42,Undervalued by analysts only
+BP,2026-10-11,46.25,11.8,33.89,63.24,49.23,Undervalued by analysts only
+ADP,2026-10-11,270.88,182.18,204.2,231.91,271.73,Undervalued by analysts only
+INTU,2026-10-11,302.75,285.15,358.73,443.89,392.64,Undervalued by both
+NOW,2026-10-11,140.86,17.97,42.27,70.11,144.97,Undervalued by analysts only
+PANW,2026-10-11,418.78,32.58,57.37,93.62,377.95,Overvalued by both
+CMG,2026-10-11,31.59,15.52,20.92,27.17,44.11,Undervalued by analysts only
+ORLY,2026-10-11,86.45,40.54,58.35,88.27,108.67,Undervalued by analysts only
+AZO,2026-10-11,2939.85,2152.66,3351.24,5469.13,3650.65,Undervalued by both
+ISRG,2026-10-11,423.96,87.73,120.81,167.37,530.25,Undervalued by analysts only

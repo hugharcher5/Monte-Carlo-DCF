@@ -312,7 +312,8 @@ def run_valuation(
 
     p10, p25, p50, p75, p90 = (float(x) for x in np.percentile(sims, [10, 25, 50, 75, 90]))
     price = base.current_price_usd
-    flags = list(output_flags(price, p10, p50, base.stub, wacc_r.rf_is_local, base.currency, unproven))
+    flags = list(output_flags(price, p10, p50, base.stub, wacc_r.rf_is_local, base.currency, unproven,
+                              base.wacc, base.terminal_g))
     implied = {} if light else implied_inputs(base, price)
 
     transparency = {}
