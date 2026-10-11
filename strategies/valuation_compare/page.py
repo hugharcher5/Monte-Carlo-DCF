@@ -6,7 +6,10 @@ Phase 3 registry page imports its card from here, so the numbers live in one pla
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 
@@ -132,16 +135,141 @@ def _render_s22_group(expanded: bool = False) -> None:
         )
 
 
-# ── Main render ───────────────────────────────────────────────────────────────
+# ── Main render: the experiment write-up ──────────────────────────────────────
+
+_RESULTS = Path(__file__).resolve().parents[2] / "research" / "valuationcompare_S22" / "results"
+_SIGNALS = [("dcf", "DCF margin of safety", "seagreen"), ("pe", "P/E", "steelblue"),
+            ("ps", "P/S", "darkorange"), ("pb", "P/B", "mediumpurple")]
+
+
+@st.cache_data(show_spinner=False)
+def _load(kind: str) -> dict[str, pd.DataFrame]:
+    """kind: 'intersection' (same stocks for every signal) or 'period_returns' (first run)."""
+    return {s: pd.read_csv(_RESULTS / f"s22_{s}_{kind}.csv", parse_dates=["rebalance_date"])
+            for s, _, _ in _SIGNALS}
+
+
+def _metrics(df: pd.DataFrame) -> dict:
+    net = df["ret_net"]
+    growth = (1 + net).cumprod()
+    return {
+        "Return a year (after costs)": f"{growth.iloc[-1] ** (4 / len(net)) - 1:+.1%}",
+        "Sharpe ratio": f"{net.mean() / net.std() * 2:.2f}",
+        "Worst fall": f"{(growth / growth.cummax() - 1).min():.0%}",
+        "Ranking accuracy (IC)": f"{df['ic'].mean():+.3f}",
+        "Quarters beating the market": f"{(net > df['mkt_ret']).mean():.0%}",
+    }
 
 
 def render_valuation_compare_page() -> None:
-    st.markdown("### DCF vs. simple valuation ratios (S22)")
+    st.markdown("### Does a DCF pick better stocks than a simple ratio?")
+
     st.markdown(
-        "Does the DCF engine behind the valuation tool actually find better stocks than a "
-        "free, spreadsheet-simple ratio? This test builds long-only portfolios of the 20% "
-        "most undervalued US small caps each quarter, ranked four ways (DCF margin of "
-        "safety, P/E, P/S and P/B), and compares them on the same universe, window and "
-        "trading-cost model."
+        "**Aim.** The valuation tool runs a full discounted cash flow model: around a dozen "
+        "inputs from each company's filings, a cost of capital, a forecast and a terminal "
+        "value. A P/E, P/S or P/B ratio takes one line of a spreadsheet. If a free ratio "
+        "finds undervalued stocks just as well, the extra work buys nothing. This experiment "
+        "tests whether it does."
     )
-    _render_s22_group(expanded=True)
+    st.markdown(
+        "**Hypothesis.** A portfolio of the stocks the DCF calls most undervalued earns a "
+        "higher risk-adjusted return than portfolios picked the same way by P/E, P/S or P/B."
+    )
+
+    st.markdown("**Variables**")
+    st.dataframe(pd.DataFrame([
+        {"Type": "Independent (what changes)",
+         "Variable": "The signal used to rank stocks: DCF margin of safety "
+                     "((DCF value − price) ÷ price), P/E, P/S or P/B"},
+        {"Type": "Dependent (what is measured)",
+         "Variable": "Return after trading costs, Sharpe ratio, worst fall, ranking accuracy "
+                     "(information coefficient), and return compared with the whole universe"},
+        {"Type": "Constant: universe",
+         "Variable": "US companies worth $100M to $2B, price at least $1, at least $1M traded a day. "
+                     "Includes companies that later went bankrupt or delisted (Tiingo prices), "
+                     "held to their last trading day"},
+        {"Type": "Constant: data",
+         "Variable": "Point in time: only filings published before each rebalance date (SEC XBRL)"},
+        {"Type": "Constant: period",
+         "Variable": "January 2015 to January 2021, rebalanced every quarter (24 quarters)"},
+        {"Type": "Constant: portfolio rule",
+         "Variable": "Buy the 20% most undervalued, equal weight, long only, at least 20 stocks"},
+        {"Type": "Constant: costs",
+         "Variable": "Bid-ask spread of 0.2% to 1% a trade depending on company size, on every trade"},
+        {"Type": "Constant: stocks compared",
+         "Variable": "In the fair run, only stocks all four signals can value that quarter"},
+    ]), hide_index=True, use_container_width=True)
+
+    st.markdown(
+        "**Method.**\n"
+        "1. Each quarter, build the universe from prices and filings available on that date.\n"
+        "2. Score every stock four ways. P/E only works when earnings are positive, P/B when "
+        "book equity is positive, and the DCF when the filings have every input it needs.\n"
+        "3. Keep only stocks with all four scores, so each signal chooses from the same list.\n"
+        "4. Buy the top 20% by each signal, hold for a quarter, subtract trading costs, repeat.\n"
+        "5. Compare the four portfolios with each other and with all stocks in the universe "
+        "held equally."
+    )
+
+    first = _load("period_returns")
+    fair = _load("intersection")
+    st.markdown("**Sample size** (average per quarter)")
+    st.dataframe(pd.DataFrame([
+        {"Test": label,
+         "Stocks in universe": f"{first[s]['n_universe'].mean():.0f}",
+         "Stocks the signal could score": f"{first[s]['n_with_signal'].mean():.0f}",
+         "Stocks scored by all four (fair run)": f"{fair[s]['n_universe'].mean():.0f}",
+         "Stocks held (fair run)": f"{fair[s]['n_long'].mean():.0f}"}
+        for s, label, _ in _SIGNALS
+    ]), hide_index=True, use_container_width=True)
+    st.caption("825 different companies passed through the universe over the 24 quarters.")
+
+    st.markdown("**Results**")
+    def _growth(d: pd.DataFrame, col: str) -> tuple[list, list]:
+        """$1 at the first rebalance, then its value at the end of each quarter."""
+        x = [d["rebalance_date"].iloc[0]] + list(d["rebalance_date"] + pd.DateOffset(months=3))
+        return x, [1.0] + list((1 + d[col]).cumprod())
+
+    fig = go.Figure()
+    for s, label, color in _SIGNALS:
+        x, y = _growth(fair[s], "ret_net")
+        fig.add_trace(go.Scatter(x=x, y=y,
+                                 mode="lines", name=label, line=dict(color=color, width=2),
+                                 hovertemplate="%{x|%b %Y}: $%{y:.2f}<extra></extra>"))
+    x, y = _growth(fair["dcf"], "mkt_ret")
+    fig.add_trace(go.Scatter(x=x, y=y,
+                             mode="lines", name="Whole universe, equal weight",
+                             line=dict(color="grey", dash="dash"),
+                             hovertemplate="%{x|%b %Y}: $%{y:.2f}<extra></extra>"))
+    fig.update_layout(title="Growth of $1, same stocks for every signal, after costs",
+                      yaxis_title="Value of $1", height=420, margin=dict(t=50, b=40),
+                      legend=dict(orientation="h", yanchor="top", y=-0.12))
+    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(pd.DataFrame([{"Signal": label, **_metrics(fair[s])} for s, label, _ in _SIGNALS]),
+                 hide_index=True, use_container_width=True)
+
+    st.markdown(
+        "**Conclusion.** The hypothesis is rejected. On the same stocks, every \\$1 grew to "
+        "between \\$1.70 and \\$1.73 whichever signal picked them, with Sharpe ratios between 0.41 "
+        "and 0.43. Holding every stock in the universe equally grew \\$1 to \\$2.13 (before costs), "
+        "so none of the four added value over the market. The DCF did no worse than the "
+        "ratios, but its extra complexity bought no measurable edge. None of the four passed "
+        "the deflated Sharpe test, which adjusts for the 28 strategies tested in this research "
+        "programme. Most of the return came from small caps rising over the period."
+    )
+    st.markdown(
+        "**Limitations.** Six years and 24 quarters is a short sample. The test covers US "
+        "small caps only, where a DCF has the least reliable inputs. The DCF could value only "
+        "about two thirds of the universe, so the fair run uses fewer stocks."
+    )
+
+    with st.expander("First run, before the comparison was made fair"):
+        st.markdown(
+            "The first run let each signal choose from every stock it could score. P/S came "
+            "out on top and the DCF second. That ranking was misleading: P/S and P/B could "
+            "score over 90% of the universe, while P/E and the DCF only scored about 60%, "
+            "mostly larger and profitable companies. Restricting all four to the same stocks "
+            "made the differences disappear, which is why the fair run above is the result."
+        )
+        st.dataframe(pd.DataFrame([{"Signal": label, **_metrics(first[s])} for s, label, _ in _SIGNALS]),
+                     hide_index=True, use_container_width=True)
