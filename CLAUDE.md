@@ -8,10 +8,10 @@ A personal quantitative research and DCF valuation tool built in Python.
 Archer-Capital/
 ├── dcf/                  — DCF valuation engine + Streamlit UI (complete)
 │   ├── valuation/        — core DCF, Monte Carlo, WACC, data ingestion
-│   ├── portfolio/        — dashboard (terminal) and web UI (Streamlit)
+│   ├── portfolio/        — dashboard (terminal) and web UI (web.py entry point, app/ page sections)
 │   ├── config/           — positions.yaml
 │   ├── output/           — saved Monte Carlo charts
-│   ├── tests/            — unit and consistency tests
+│   ├── tests/            — offline unit tests (synthetic companies, no network); CI runs them
 │   ├── run_dcf.py        — CLI: deterministic DCF for a ticker
 │   ├── run_mc.py         — CLI: Monte Carlo DCF for a ticker
 │   └── run_reconcile.py  — CLI: multi-source data reconciliation
@@ -45,9 +45,9 @@ Run the Monte Carlo DCF:
 venv/bin/python dcf/run_mc.py MSFT
 ```
 
-Run tests:
+Run tests (pytest.ini limits collection to dcf/tests):
 ```bash
-venv/bin/python -m pytest dcf/tests/
+venv/bin/pytest
 ```
 
 Install dependencies (first time or after changes to requirements.txt):
@@ -69,7 +69,9 @@ venv/bin/pip install -r requirements.txt
 
 - Positions are defined in `dcf/config/positions.yaml`, not hardcoded
 - yfinance calls use `fast_info` wrapped in try/except with up to 3 retries and 2s backoff
-- All DCF computation is pure (no I/O) — safe to call in a Monte Carlo loop
+- All DCF computation is pure (no I/O); dcf.value_many() values every Monte Carlo draw in one vectorised call
+- Model code logs instead of printing; terminal tables live in valuation/report.py
+- The app, the CLI and the 100-stock benchmark all value a ticker through valuation/pipeline.value_ticker()
 - `dcf/conftest.py` adds `dcf/` to sys.path so pytest finds `valuation/` when run from the repo root
 
 ## Research Registry (open-ended Phase 3 trials)
