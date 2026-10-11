@@ -6,6 +6,7 @@ reconcile.py can compare them without knowing the origin.
 """
 
 from __future__ import annotations
+import logging
 import math
 import os
 import json
@@ -19,6 +20,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
+log = logging.getLogger(__name__)
 
 
 # ── Normalized schema ─────────────────────────────────────────────────────────
@@ -57,14 +59,28 @@ class SourceData:
     shares_date:  object = None    # period end of the share count
     tags_used: dict = field(default_factory=dict)   # field → XBRL tag behind the latest value
 
+    # ── Treasury-stock-method inputs (fetch_edgar only) ──────────────────────
+    basic_shares:      float = float("nan")   # cover-page shares outstanding (dei)
+    basic_shares_date: object = None
+    options_outstanding: float = float("nan") # latest 10-K
+    options_strike:      float = float("nan") # weighted-average exercise price
+    rsus_unvested:       float = float("nan") # restricted stock units not yet vested
+    options_date:        object = None
+
+    # Whether total_debt excludes operating leases (the model's convention).
+    debt_ex_leases: bool = True
+
 
 # ── Yahoo Finance fetcher (wraps valuation/data.py) ───────────────────────────
 
 def fetch_yahoo(ticker: str) -> SourceData:
-    """Delegate to fetch_raw() and re-map fields into SourceData."""
+    """Fetch from Yahoo and re-map fields into SourceData."""
     from .data import fetch_raw
+    return yahoo_source_from_raw(fetch_raw(ticker))
 
-    raw     = fetch_raw(ticker)
+
+def yahoo_source_from_raw(raw) -> SourceData:
+    """SourceData view of an already-fetched RawData (no second Yahoo fetch)."""
     missing = list(raw.missing_fields)
 
     # Normalize total_debt: subtract operating lease liabilities.
@@ -97,6 +113,7 @@ def fetch_yahoo(ticker: str) -> SourceData:
         cash=raw.cash,
         tax_rate=tax_rate,
         missing_fields=missing,
+        debt_ex_leases=True,
     )
 
 
@@ -119,11 +136,11 @@ def _fmp_get(endpoint: str, symbol: str, api_key: str) -> list[dict]:
     except urllib.error.HTTPError as e:
         try:
             detail = e.read().decode(errors="replace").strip()
-        except Exception:
+        except OSError:
             detail = ""
         suffix = f": {detail}" if detail else ""
         raise RuntimeError(f"FMP HTTP {e.code} for {endpoint}{suffix}") from e
-    except Exception as e:
+    except (OSError, ValueError) as e:
         raise RuntimeError(f"FMP request failed ({endpoint}): {e}") from e
 
     if isinstance(data, dict):
@@ -192,7 +209,7 @@ def fetch_edgar(ticker: str) -> SourceData:
                 return json.loads(raw.decode())
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"EDGAR HTTP {e.code} for {url}") from e
-        except Exception as e:
+        except (OSError, ValueError) as e:
             raise RuntimeError(f"EDGAR request failed: {e}") from e
 
     # ── 1. CIK lookup ─────────────────────────────────────────────────────────
@@ -207,13 +224,13 @@ def fetch_edgar(ticker: str) -> SourceData:
     if cik is None:
         raise RuntimeError(f"EDGAR: ticker '{ticker}' not found in company_tickers.json")
 
-    print(f"  [EDGAR] CIK for {ticker_upper}: {cik}", end=" ", flush=True)
+    log.info("EDGAR CIK for %s: %s", ticker_upper, cik)
 
     # ── 2. Company facts ──────────────────────────────────────────────────────
     facts_url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
     facts = _get(facts_url)
     us_gaap = facts.get("facts", {}).get("us-gaap", {})
-    print("✓")
+    dei = facts.get("facts", {}).get("dei", {})
     if not us_gaap:
         # Foreign private issuers filing 20-F under IFRS tag with ifrs-full, which
         # uses different concepts; every field then falls back to Yahoo Finance.
@@ -388,6 +405,31 @@ def fetch_edgar(ticker: str) -> SourceData:
         shares_date = pd.Timestamp(end)
         tags_used["diluted_shares"] = "WeightedAverageNumberOfDilutedSharesOutstanding"
 
+    # ── Treasury-stock-method inputs ─────────────────────────────────────────
+    # Basic shares from the cover page of the latest 10-K/10-Q (dei tag).  Some
+    # filers with several share classes report this only per class, which the
+    # XBRL API leaves out; those fall back in filings.py.
+    basic_shares, basic_date = float("nan"), None
+    pts = [(r["end"], r.get("filed", ""), float(r["val"]))
+           for r in dei.get("EntityCommonStockSharesOutstanding", {}).get("units", {}).get("shares", [])
+           if r.get("form") in _CURRENT_FORMS and r.get("end")]
+    if pts:
+        end, _, basic_shares = max(pts)
+        basic_date = pd.Timestamp(end)
+
+    def _annual_instant(tag: str, unit: str) -> tuple[float, object]:
+        rows = [r for r in _rows(tag, unit) if r.get("form") in _ANNUAL_FORMS and r.get("end")]
+        if not rows:
+            return float("nan"), None
+        r = max(rows, key=lambda r: (r["end"], r.get("filed", "")))
+        return float(r["val"]), pd.Timestamp(r["end"])
+
+    _P = "ShareBasedCompensationArrangementByShareBasedPaymentAward"
+    options_n, options_date = _annual_instant(f"{_P}OptionsOutstandingNumber", "shares")
+    options_k, _ = _annual_instant(f"{_P}OptionsOutstandingWeightedAverageExercisePrice", "USD/shares")
+    rsus_n, rsus_date = _annual_instant(f"{_P}EquityInstrumentsOtherThanOptionsNonvestedNumber", "shares")
+    options_date = options_date or rsus_date
+
     # ── Fiscal-year-end balance sheet: operating working capital ─────────────
     fy_date = revenue.index[-1] if not revenue.empty else None
     current_assets, _, _ = _instant_at(["AssetsCurrent"], fy_date, forms=_ANNUAL_FORMS)
@@ -418,7 +460,7 @@ def fetch_edgar(ticker: str) -> SourceData:
         missing.append("tax_rate")
 
     if missing:
-        print(f"  [EDGAR] not found in filings: {', '.join(missing)}")
+        log.info("EDGAR %s: not found in filings: %s", ticker_upper, ", ".join(missing))
 
     return SourceData(
         source_name="EDGAR",
@@ -443,6 +485,12 @@ def fetch_edgar(ticker: str) -> SourceData:
         balance_date=bs_date,
         shares_date=shares_date,
         tags_used=tags_used,
+        basic_shares=basic_shares,
+        basic_shares_date=basic_date,
+        options_outstanding=options_n,
+        options_strike=options_k,
+        rsus_unvested=rsus_n,
+        options_date=options_date,
     )
 
 
@@ -458,11 +506,10 @@ def fetch_fmp(ticker: str) -> SourceData:
             "Free keys available at https://financialmodelingprep.com/developer/docs"
         )
 
-    print(f"  [FMP] Fetching {ticker}…", end=" ", flush=True)
     inc = _fmp_get("income-statement", ticker, api_key)
     bs  = _fmp_get("balance-sheet-statement", ticker, api_key)
     cf  = _fmp_get("cash-flow-statement", ticker, api_key)
-    print(f"got {len(inc)} income / {len(bs)} balance / {len(cf)} cashflow rows")
+    log.info("FMP %s: %d income / %d balance / %d cash-flow rows", ticker, len(inc), len(bs), len(cf))
 
     if not inc:
         raise RuntimeError(
@@ -496,6 +543,17 @@ def fetch_fmp(ticker: str) -> SourceData:
                                      "shortTermBorrowings",
                                      "currentPortionOfLongTermDebt") or 0.0
         total_debt = ltd + cur_debt
+
+    # FMP's totalDebt includes all lease liabilities (for SBUX in FY2025, $10.5B
+    # of $26.6B).  The model's convention excludes operating leases, so remove
+    # FMP's lease line.  This also removes finance leases (FMP does not split
+    # them out), so the result can sit slightly below EDGAR's figure.
+    leases = _scalar_first(bs, "capitalLeaseObligations")
+    if math.isfinite(leases) and math.isfinite(total_debt):
+        total_debt = max(0.0, total_debt - leases)
+        debt_ex_leases = True
+    else:
+        debt_ex_leases = False
 
     # Diluted shares from most recent income statement row
     diluted_shares = _scalar_first(inc, "weightedAverageShsOutDil",
@@ -534,4 +592,5 @@ def fetch_fmp(ticker: str) -> SourceData:
         cash=cash,
         tax_rate=tax_rate,
         missing_fields=missing,
+        debt_ex_leases=debt_ex_leases,
     )

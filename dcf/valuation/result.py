@@ -16,20 +16,20 @@ class ValuationResult:
     currency:          str
     current_price_usd: float
 
-    # ── Computation artifacts (for expanders / terminal print) ────────────────
+    # ── Computation artefacts ─────────────────────────────────────────────────
     drivers:     Drivers
     wacc_result: WACCResult
     assumptions: Assumptions
     dcf:         DCFResult
 
-    # ── Monte Carlo outputs (sims is empty array when n_sims=0) ───────────────
-    sims:            np.ndarray   # full un-winsorized array, shape (n_valid,)
+    # ── Monte Carlo outputs (sims is an empty array when n_sims=0) ────────────
+    sims:            np.ndarray   # full array of valid draws, shape (n_valid,)
     n_valid:         int
     copula_label:    str
     consistency_pass: bool
-    cc_p50:          float        # zero-variance run median (for terminal display)
+    cc_p50:          float        # zero-width run median
 
-    # ── Pre-computed stats (NaN when no sims) ─────────────────────────────────
+    # ── Summary statistics (NaN when no sims) ─────────────────────────────────
     p10:             float
     p25:             float
     p50:             float
@@ -37,34 +37,30 @@ class ValuationResult:
     p90:             float
     mean_val:        float
     std_val:         float
-    pct_undervalued: float        # percentage of draws > current price
+    pct_undervalued: float        # % of simulated scenarios above the current price
 
-    # ── Cross-source uncertainty (empty dict when no reconciliation supplied) ──
-    # Maps MC variable name → σ_cross (absolute, same units as the variable).
-    # Populated by run_valuation(sigma_cross=...) from ReconcileResult.sigma_cross.
+    # ── Cross-source uncertainty ──────────────────────────────────────────────
     sigma_cross: dict = field(default_factory=dict)
+    recon_fields: dict = field(default_factory=dict)   # field → {source, disagree_pct, field_type}
+    recon_sigma:  dict = field(default_factory=dict)   # variable → {sigma_hist, sigma_cross, sigma_eff}
 
-    # ── Reconciliation detail for UI display ──────────────────────────────────
-    # recon_fields: field → {source, disagree_pct, field_type}
-    # recon_sigma:  variable → {sigma_hist, sigma_cross, sigma_eff}
-    # Both empty when run_valuation() is called without a reconcile_result.
-    recon_fields: dict = field(default_factory=dict)
-    recon_sigma:  dict = field(default_factory=dict)
+    sw: float = 0.015             # WACC standard deviation used
 
-    sw:  float = 0.015   # σ_eff for WACC PERT spread (historical or fallback)
-    stm: float = 0.08    # σ_eff for target-margin PERT spread (historical or fallback)
-    stg: float = 0.020   # σ for terminal-g PERT spread (macro GDP history or fallback)
-
-    # ── Full transparency payload (populated on main run; empty dict when n_sims=0) ──
+    # ── Transparency payload (empty when n_sims=0) ────────────────────────────
     transparency: dict = field(default_factory=dict)
 
-    # ── DCF applicability gate ─────────────────────────────────────────────────
-    # False when terminal-year FCFF <= 0 (Gordon Growth would be degenerate).
-    # UI suppresses headline valuation metrics and shows an explanatory banner.
-    dcf_applicable: bool = True
+    # ── Applicability and warnings ────────────────────────────────────────────
+    dcf_applicable: bool = True   # False when terminal FCFF <= 0 or base value <= 0
+    flags: list = field(default_factory=list)          # plain-English warnings
 
     # ── Data provenance and company profile ──────────────────────────────────
-    # data_provenance: field → {"source": "SEC EDGAR" | "Yahoo Finance" | ..., "detail": why}
     data_provenance: dict = field(default_factory=dict)
-    unproven: bool = False              # no profitable history / short history → wider tails
-    target_margin_basis: str = ""       # how the mature EBIT margin was chosen
+    unproven: bool = False
+    target_margin_basis: str = ""
+
+    # ── Forecast inputs, terminal growth and reverse DCF ──────────────────────
+    forecast_inputs: object = None                     # priors.ForecastInputs
+    terminal_g_range: tuple = (float("nan"),) * 3      # (mode, low, high)
+    implied: dict = field(default_factory=dict)        # reverse DCF: param → value or None
+    valuation_date: object = None
+    fiscal_year_end: object = None

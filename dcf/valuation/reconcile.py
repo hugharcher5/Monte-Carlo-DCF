@@ -6,8 +6,14 @@ NaN when fewer than two sources have data.
 
 Fields are classified as DATA or DEFINITIONAL:
   DATA        — genuine uncertainty between independent sources; σ_cross drives MC widening
-  DEFINITIONAL — difference is a reporting convention resolved by normalisation in sources.py;
-                 does not reflect real uncertainty about the company's economics
+  DEFINITIONAL — difference is a reporting convention (for example whether leases count
+                 as debt); it never enters σ_cross
+
+σ_cross is a robust spread: 1.4826 × the median absolute deviation from the
+median across sources (equal to the standard deviation for normal data, but one
+wild source cannot dominate it).  Before it is computed, a source's value is
+dropped when it is missing or more than 10x away from Yahoo's (the same rule
+filings.py uses to spot share counts tagged in millions).
 """
 
 from __future__ import annotations
@@ -69,6 +75,34 @@ def _relative_spread(values: list[float]) -> float:
     return (max(finite) - min(finite)) / med
 
 
+MAD_SCALE: float = 1.4826
+MAX_RATIO_VS_YAHOO: float = 10.0
+
+
+def robust_spread(values: list[float]) -> float:
+    """1.4826 × median absolute deviation of the finite values (0 when < 2)."""
+    v = np.array([x for x in values if x is not None and math.isfinite(x)], dtype=float)
+    if len(v) < 2:
+        return 0.0
+    return float(MAD_SCALE * np.median(np.abs(v - np.median(v))))
+
+
+def plausible_levels(sources: list[SourceData], field: str) -> list[float]:
+    """Finite, positive values of a level field, dropping any more than 10x away
+    from Yahoo's (a scaling error such as a share count tagged in millions)."""
+    vals = {s.source_name: getattr(s, field) for s in sources}
+    ref = vals.get("Yahoo")
+    out = []
+    for name, v in vals.items():
+        if v is None or not math.isfinite(v) or v <= 0:
+            continue
+        if (ref is not None and math.isfinite(ref) and ref > 0 and name != "Yahoo"
+                and not 1.0 / MAX_RATIO_VS_YAHOO < v / ref < MAX_RATIO_VS_YAHOO):
+            continue
+        out.append(float(v))
+    return out
+
+
 def _last_val(s: pd.Series) -> float:
     """Most recent (last index) value, or NaN if empty."""
     return float(s.iloc[-1]) if not s.empty else float("nan")
@@ -128,54 +162,38 @@ def reconcile(sources: list[SourceData]) -> ReconcileResult:
     # are expected to disagree (by convention) and must not widen MC distributions.
     sigma_cross: dict[str, float] = {}
 
-    # Revenue growth: compute last-over-penultimate growth rate for each source,
-    # then take std across sources.  Using derived rate (not raw level) matches
-    # how the MC variable is parameterised.
-    growth_vals: list[float] = []
-    for s in sources:
-        if len(s.revenue) >= 2:
-            prev = float(s.revenue.iloc[-2])
-            curr = float(s.revenue.iloc[-1])
-            if abs(prev) > 1e-9:
-                growth_vals.append(curr / prev - 1.0)
-    if len(growth_vals) >= 2:
-        sigma_cross["revenue_growth"] = float(np.std(growth_vals, ddof=0))
+    def _ratio_last(num: str, s: SourceData, growth: bool = False) -> float:
+        rev = s.revenue
+        if growth:
+            if len(rev) < 2 or abs(float(rev.iloc[-2])) < 1e-9:
+                return float("nan")
+            return float(rev.iloc[-1]) / float(rev.iloc[-2]) - 1.0
+        ser = getattr(s, num)
+        if ser.empty or rev.empty or abs(float(rev.iloc[-1])) < 1e-9:
+            return float("nan")
+        return float(ser.iloc[-1]) / float(rev.iloc[-1])
 
-    # EBIT margin: last-year margin from each source.
-    margin_vals: list[float] = []
-    for s in sources:
-        if not s.ebit.empty and not s.revenue.empty:
-            rev = float(s.revenue.iloc[-1])
-            if abs(rev) > 1e-9:
-                margin_vals.append(float(s.ebit.iloc[-1]) / rev)
-    if len(margin_vals) >= 2:
-        sigma_cross["ebit_margin"] = float(np.std(margin_vals, ddof=0))
+    # Revenue growth, EBIT margin and CapEx intensity: the latest-year ratio from
+    # each source (the same form the model uses), then the robust spread.
+    for key, num, growth in (("revenue_growth", "revenue", True), ("ebit_margin", "ebit", False),
+                             ("capex_pct", "capex", False)):
+        vals = [_ratio_last(num, s, growth) for s in sources]
+        if sum(math.isfinite(v) for v in vals) >= 2:
+            sigma_cross[key] = robust_spread(vals)
 
-    # CapEx intensity: last-year CapEx / revenue from each source.
-    capex_vals: list[float] = []
-    for s in sources:
-        if not s.capex.empty and not s.revenue.empty:
-            rev = float(s.revenue.iloc[-1])
-            if abs(rev) > 1e-9:
-                capex_vals.append(float(s.capex.iloc[-1]) / rev)
-    if len(capex_vals) >= 2:
-        sigma_cross["capex_pct"] = float(np.std(capex_vals, ddof=0))
-
-    # Diluted shares: std of the level across sources.
-    shares_vals = [s.diluted_shares for s in sources if math.isfinite(s.diluted_shares)]
+    # Share count: drop missing or mis-scaled counts first.
+    shares_vals = plausible_levels(sources, "diluted_shares")
     if len(shares_vals) >= 2:
-        sigma_cross["diluted_shares"] = float(np.std(shares_vals, ddof=0))
+        sigma_cross["diluted_shares"] = robust_spread(shares_vals)
 
-    # Net debt: std of (total_debt − cash) across sources.
-    # total_debt is DEFINITIONAL (convention-standardised), cash is DATA;
-    # any residual net-debt spread comes from cash differences.
-    nd_vals = [
-        s.total_debt - s.cash
-        for s in sources
-        if math.isfinite(s.total_debt) and math.isfinite(s.cash)
-    ]
-    if len(nd_vals) >= 2:
-        sigma_cross["net_debt"] = float(np.std(nd_vals, ddof=0))
+    # Net debt: debt is DEFINITIONAL (sources disagree mainly on whether leases
+    # count), so every source's cash is set against the preferred source's debt.
+    # Only genuine disagreement about cash moves net debt.
+    pref_debt = preferred.total_debt
+    if math.isfinite(pref_debt):
+        cash_vals = [s.cash for s in sources if math.isfinite(s.cash) and s.cash >= 0]
+        if len(cash_vals) >= 2:
+            sigma_cross["net_debt"] = robust_spread([pref_debt - c for c in cash_vals])
 
     return ReconcileResult(
         preferred=preferred,

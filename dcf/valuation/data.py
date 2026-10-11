@@ -1,12 +1,18 @@
 """Fetch and structure raw financial inputs from yfinance for a single ticker."""
 
 from __future__ import annotations
+import logging
 import warnings
 import yfinance as yf
 import pandas as pd
 from dataclasses import dataclass, field
 
 warnings.filterwarnings("ignore")
+log = logging.getLogger(__name__)
+
+# Yahoo raises a mix of network, parsing and key errors; these are the ones a
+# missing or rate-limited field produces in practice.
+_YF_ERRORS = (KeyError, IndexError, TypeError, ValueError, AttributeError, OSError, RuntimeError)
 
 
 @dataclass
@@ -18,7 +24,7 @@ class RawData:
     market_cap_local: float     # market cap in reporting currency
     fx_rate: float              # 1 unit local → USD
     beta: float
-    diluted_shares: float       # actual share count
+    diluted_shares: float       # share count the model divides by (see shares_method)
 
     # Annual series — index is fiscal-year-end date, ascending (oldest first)
     revenue: pd.Series          # in reporting currency
@@ -52,6 +58,12 @@ class RawData:
     # for companies without a profitable history of their own.
     sector:   str = ""
     industry: str = ""
+    country:  str = ""
+
+    # Valuation date (cash flows are discounted to it); None means today.
+    valuation_date: object = None
+    # How diluted_shares was obtained, for the provenance table.
+    shares_method: str = "Yahoo implied shares outstanding (basic, all share classes)"
 
 
 def _safe_row(df: pd.DataFrame, candidates: list[str],
@@ -102,9 +114,9 @@ def get_fx_rate(ccy: str) -> float:
         rate = float(yf.Ticker(f"{ccy}USD=X").fast_info.last_price)
         if rate > 0:
             return rate
-    except Exception:
+    except _YF_ERRORS:
         pass
-    print(f"  [DATA] Warning: could not fetch FX rate for {ccy}/USD; assuming 1.0")
+    log.warning("could not fetch FX rate for %s/USD; assuming 1.0", ccy)
     return 1.0
 
 
@@ -127,7 +139,7 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
     beta = _safe_scalar(info, ['beta'], [], 'beta', default=float('nan'))
     if beta != beta:
         beta = 1.0
-        print(f"  [DATA] beta missing for {ticker}; defaulting to 1.0")
+        log.info("beta missing for %s; defaulting to 1.0", ticker)
 
     # ── Diluted shares ────────────────────────────────────────────────────────
     diluted_shares = _safe_scalar(
@@ -136,7 +148,7 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
     if diluted_shares != diluted_shares:
         if price_usd > 0 and mktcap_usd > 0:
             diluted_shares = mktcap_usd / price_usd
-            print(f"  [DATA] diluted_shares inferred from market_cap / price")
+            log.info("share count inferred from market cap / price")
         else:
             diluted_shares = 0.0
             missing.append('diluted_shares')
@@ -147,8 +159,8 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
         hist = t.history(period='1y', interval='1d')
         if len(hist) >= 20:
             price_vol = float(hist['Close'].pct_change().dropna().std() * (252 ** 0.5))
-    except Exception:
-        pass
+    except _YF_ERRORS:
+        hist = pd.DataFrame()
 
     # ── Quote fallbacks ───────────────────────────────────────────────────────
     # Yahoo's quote endpoint (t.info) is often rate-limited on cloud hosts while
@@ -157,24 +169,24 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
     if not price_usd > 0:
         try:
             last = float(t.fast_info['last_price'])
-        except Exception:
+        except _YF_ERRORS:
             last = float('nan')
         if not last > 0:
             try:
                 last = float(hist['Close'].dropna().iloc[-1])
-            except Exception:
+            except _YF_ERRORS:
                 last = float('nan')
         if last > 0:
             price_usd = last
             if 'current_price_usd' in missing:
                 missing.remove('current_price_usd')
-            print(f"  [DATA] price for {ticker} taken from Yahoo price history")
+            log.info("price for %s taken from Yahoo price history", ticker)
     if not mktcap_usd > 0 and price_usd > 0 and diluted_shares > 0:
         mktcap_usd = price_usd * diluted_shares
         mktcap_local = mktcap_usd / fx_rate if fx_rate > 0 else mktcap_usd
         if 'market_cap_usd' in missing:
             missing.remove('market_cap_usd')
-        print(f"  [DATA] market cap for {ticker} rebuilt from price × shares")
+        log.info("market cap for %s rebuilt from price x shares", ticker)
 
     # ── Financial statements ──────────────────────────────────────────────────
     def _fetch(primary: str, fallback: str) -> pd.DataFrame:
@@ -183,7 +195,7 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
                 df = getattr(t, attr)
                 if df is not None and not df.empty:
                     return df
-            except Exception:
+            except _YF_ERRORS:
                 pass
         return pd.DataFrame()
 
@@ -241,27 +253,9 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
     _cur_d   = _bs_latest(bs, ['Current Debt', 'Short Term Debt'],                      [], '_cur_d')
     op_lease_liab = _op_lt + max(0.0, _cur_dcl - _cur_d)
 
-    # ── Summary print ─────────────────────────────────────────────────────────
     uniq_missing = sorted(set(missing))
-    print(f"\n{'='*60}")
-    print(f"  RAW DATA — {ticker}")
-    print(f"{'='*60}")
     if uniq_missing:
-        print(f"  Missing fields: {', '.join(uniq_missing)}")
-    else:
-        print(f"  All fields fetched successfully.")
-    print(f"\n  Currency (reporting)  : {currency}  (1 {currency} = {fx_rate:.6f} USD)")
-    print(f"  Current price (USD)   : ${price_usd:,.2f}")
-    print(f"  Market cap (USD)      : ${mktcap_usd/1e9:.2f}B")
-    print(f"  Market cap ({currency:3s})      : {mktcap_local/1e9:.2f}B {currency}")
-    print(f"  Beta                  : {beta:.3f}")
-    print(f"  Diluted shares        : {diluted_shares/1e9:.3f}B")
-    print(f"  Annual revenue years  : {len(revenue)}")
-    print(f"  Cash                  : {cash/1e9:.3f}B {currency}")
-    print(f"  Total debt            : {total_debt/1e9:.3f}B {currency}")
-    nwc = (curr_assets - cash) - (curr_liab - curr_debt)
-    print(f"  Operating NWC         : {nwc/1e9:.3f}B {currency}  [(CA−Cash)−(CL−CurrDebt)]")
-    print(f"  Price vol (1yr ann.)  : {price_vol:.1%}")
+        log.info("%s: missing from Yahoo: %s", ticker, ", ".join(uniq_missing))
 
     return RawData(
         ticker=ticker,
@@ -290,4 +284,5 @@ def fetch_raw(ticker: str, years: int = 5) -> RawData:
         missing_fields=uniq_missing,
         sector=str(info.get('sector') or ''),
         industry=str(info.get('industry') or ''),
+        country=str(info.get('country') or ''),
     )

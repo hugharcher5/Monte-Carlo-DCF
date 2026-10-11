@@ -1,10 +1,13 @@
 """Compute base-case DCF drivers from historical financials."""
 
 from __future__ import annotations
+import logging
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from .data import RawData
+
+log = logging.getLogger(__name__)
 
 # ── Plausibility bands ────────────────────────────────────────────────────────
 _BANDS = {
@@ -20,7 +23,9 @@ _BANDS = {
 
 @dataclass
 class Drivers:
-    # Base-case values (mean of available history)
+    """Historical averages and year-to-year spreads.  These are the raw history;
+    priors.forecast_inputs() turns them into forecasts and parameter uncertainty."""
+    # Mean of available history
     revenue_growth: float
     ebit_margin: float
     tax_rate: float
@@ -32,7 +37,7 @@ class Drivers:
     # Best (peak) historical EBIT margin — anchor for target_margin
     best_ebit_margin: float
 
-    # Standard deviations — for Monte Carlo later
+    # Year-to-year standard deviations of the annual figures
     std_revenue_growth: float
     std_ebit_margin: float
     std_target_margin: float
@@ -43,8 +48,11 @@ class Drivers:
     # Historical year-by-year DataFrame for display
     hist_df: pd.DataFrame = None
 
-    # σ of historical CapEx / Revenue — spread of the sampled CapEx% in the MC
+    # σ of historical CapEx / Revenue
     std_capex_pct: float = 0.0
+    n_margin_years: int = 0      # years with an EBIT margin (one more than growth years)
+    n_capex_years: int = 0
+    flags: list = field(default_factory=list)   # plausibility warnings
 
 
 def compute_drivers(raw: RawData) -> Drivers:
@@ -128,45 +136,6 @@ def compute_drivers(raw: RawData) -> Drivers:
     _fcf_clean    = df['fcf_pct'].dropna()
     std_fcf_pct   = float(_fcf_clean.std()) if len(_fcf_clean) >= 2 else 0.0
 
-    # ── Print historical table ────────────────────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"  HISTORICAL DRIVERS — {raw.ticker}  ({years_used} years used)")
-    print(f"{'='*60}")
-
-    col_labels = [str(d.year) for d in df.index]
-    header = f"  {'Metric':<18}" + "".join(f"  {y:>8}" for y in col_labels)
-    print(f"\n{header}")
-    print("  " + "─" * (len(header) - 2))
-
-    def _row(label, col, fmt):
-        vals = "".join(f"  {fmt(v):>8}" for v in df[col])
-        print(f"  {label:<18}{vals}")
-
-    _row("Revenue (B)",    'revenue',      lambda v: f"{v/1e9:.1f}B")
-    _row("EBIT (B)",       'ebit',         lambda v: f"{v/1e9:.1f}B")
-    _row("Revenue growth", 'revenue_growth',lambda v: f"{v:.1%}")
-    _row("EBIT margin",    'ebit_margin',   lambda v: f"{v:.1%}")
-    _row("Tax rate",       'tax_rate',      lambda v: f"{v:.1%}")
-    _row("D&A %",          'da_pct',        lambda v: f"{v:.1%}")
-    _row("CapEx %",        'capex_pct',     lambda v: f"{v:.1%}")
-    _row("SBC %",          'sbc_pct',       lambda v: f"{v:.1%}")
-
-    na_cells = "".join(f"  {'n/a':>8}" for _ in range(years_used - 1))
-    print(f"  {'NWC %':<18}{na_cells}  {nwc_pct:>7.1%}   ← most recent BS only")
-
-    print(f"\n  {'─'*42}")
-    print(f"  Base-case drivers (mean of {years_used} years):")
-    print(f"  {'─'*42}")
-    print(f"  Revenue growth  : {rev_growth:>7.2%}   σ = {std_growth:.2%}")
-    print(f"  EBIT margin     : {ebit_margin:>7.2%}   σ = {std_margin:.2%}   (best historical: {best_margin:.2%})")
-    print(f"  Target margin σ : {std_margin:>7.2%}   (= EBIT margin σ; drives target-margin PERT)")
-    print(f"  FCF margin σ    : {std_fcf_pct:>7.2%}   (EBIT×(1−t)+D&A−CapEx)/Revenue")
-    print(f"  Tax rate        : {tax_rate:>7.2%}")
-    print(f"  D&A / Revenue   : {da_pct:>7.2%}")
-    print(f"  CapEx / Revenue : {capex_pct:>7.2%}")
-    print(f"  NWC / Revenue   : {nwc_pct:>7.2%}   (from most recent balance sheet)")
-    print(f"  SBC / Revenue   : {sbc_pct:>7.2%}   [Route 1: already in EBIT — not added back]")
-
     drivers = Drivers(
         revenue_growth=rev_growth,
         ebit_margin=ebit_margin,
@@ -183,6 +152,8 @@ def compute_drivers(raw: RawData) -> Drivers:
         years_used=years_used,
         hist_df=df,
         std_capex_pct=std_capex,
+        n_margin_years=int(df['ebit_margin'].notna().sum()),
+        n_capex_years=int(df['capex_pct'].notna().sum()),
     )
 
     # ── Plausibility checks ───────────────────────────────────────────────────
@@ -200,12 +171,7 @@ def compute_drivers(raw: RawData) -> Drivers:
         if not (lo <= val <= hi):
             flags.append(f"  ⚠  {name} = {val:.2%}  outside expected [{lo:.0%}, {hi:.0%}]")
 
-    print()
-    if flags:
-        print("  PLAUSIBILITY FLAGS:")
-        for f in flags:
-            print(f)
-    else:
-        print("  Plausibility: all drivers within expected ranges ✓")
-
+    for f in flags:
+        log.info("%s: plausibility flag %s", raw.ticker, f.strip())
+    drivers.flags = flags
     return drivers

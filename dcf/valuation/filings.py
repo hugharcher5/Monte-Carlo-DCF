@@ -84,6 +84,90 @@ def _gap(a: float, b: float) -> float:
     return abs(a - b) / abs(b)
 
 
+MAX_SCALE_GAP: float = 10.0     # a count >10x away from Yahoo's is a scaling error
+TSM_MAX_GAP: float = 0.25       # TSM count must sit within 25% of the next-best count
+STALE_DAYS: int = 400           # option data older than this is ignored
+
+
+def _plausible(count: float, yahoo: float) -> bool:
+    if not (math.isfinite(count) and count > 0):
+        return False
+    return not (yahoo > 0 and not 1.0 / MAX_SCALE_GAP < count / yahoo < MAX_SCALE_GAP)
+
+
+def tsm_diluted_shares(basic: float, price: float, options: float, strike: float,
+                       rsus: float) -> tuple[float, float]:
+    """Treasury-stock method: basic shares plus in-the-money options net of the
+    shares their exercise cash could buy back, plus unvested RSUs.
+    Returns (diluted shares, dilution)."""
+    dil = 0.0
+    if math.isfinite(options) and options > 0 and math.isfinite(strike) and price > 0:
+        dil += options * max(0.0, 1.0 - strike / price)
+    if math.isfinite(rsus) and rsus > 0:
+        dil += rsus
+    return basic + dil, dil
+
+
+def _apply_share_count(raw, pref, edgar, edgar_reason, mark, pref_detail) -> bool:
+    """Pick the share count, in order of preference:
+
+    1. Treasury-stock-method diluted shares from the filings: cover-page basic
+       shares plus in-the-money options (net of buy-backs at today's price)
+       plus unvested RSUs.
+    2. The latest 10-Q/10-K diluted weighted-average count (also TSM-based,
+       but averaged over the quarter at the quarter's average price).
+    3. Yahoo's implied shares outstanding (basic, all share classes).
+
+    Any filing count more than 10x away from Yahoo's is treated as mis-scaled
+    (MCD tags its weighted-average count in millions: 712.3).
+    Returns True when the count came from the filings.
+    """
+    yahoo = raw.diluted_shares
+    price_local = raw.current_price_usd / raw.fx_rate if raw.fx_rate > 0 else raw.current_price_usd
+    notes = []
+    wavg = pref.diluted_shares if pref is not None else float("nan")
+    wavg_ok = _plausible(wavg, yahoo)
+    if pref is not None and math.isfinite(wavg) and wavg > 0 and not wavg_ok:
+        notes.append(f"The filing's weighted-average count ({wavg:,.0f}) is more than 10x away "
+                     f"from Yahoo's ({yahoo:,.0f}), so it looks mis-scaled and is not used.")
+
+    if edgar is not None and _plausible(edgar.basic_shares, yahoo):
+        today = pd.Timestamp(getattr(raw, "valuation_date", None) or pd.Timestamp.today())
+        opt_date = edgar.options_date
+        fresh = opt_date is not None and (today - pd.Timestamp(opt_date)).days <= STALE_DAYS
+        options = edgar.options_outstanding if fresh else float("nan")
+        rsus = edgar.rsus_unvested if fresh else float("nan")
+        count, dil = tsm_diluted_shares(edgar.basic_shares, price_local, options,
+                                        edgar.options_strike, rsus)
+        check = wavg if wavg_ok else yahoo
+        if not check > 0 or abs(count / check - 1.0) <= TSM_MAX_GAP:
+            raw.diluted_shares = float(count)
+            raw.shares_method = "treasury-stock method"
+            when = pd.Timestamp(edgar.basic_shares_date).date() if edgar.basic_shares_date is not None else "latest"
+            detail = (f"Treasury-stock method: {edgar.basic_shares:,.0f} basic shares (cover page, {when}) "
+                      f"+ {dil:,.0f} from options and RSUs at today's price")
+            if not fresh:
+                detail += " (no current option or RSU data in the filings, so no dilution added)"
+            mark("diluted_shares", EDGAR, detail + ("" if not notes else ". " + " ".join(notes)))
+            return True
+        notes.append(f"The treasury-stock count ({count:,.0f}) is more than {TSM_MAX_GAP:.0%} away "
+                     "from the reported diluted count, so it is not used.")
+
+    if wavg_ok:
+        raw.diluted_shares = float(wavg)
+        raw.shares_method = "diluted weighted average"
+        src = EDGAR if pref.source_name == "EDGAR" else pref.source_name
+        mark("diluted_shares", src, pref_detail(pref, "shares") + ", diluted weighted-average shares"
+             + ("" if not notes else ". " + " ".join(notes)))
+        return pref.source_name == "EDGAR"
+
+    raw.shares_method = "Yahoo implied shares outstanding (basic, all share classes)"
+    mark("diluted_shares", YAHOO, " ".join(notes) or edgar_reason or
+         "Share count not found in the filings. Yahoo's implied shares outstanding is a basic "
+         "count, so option and RSU dilution is not included.")
+    return False
+
+
 def apply_filing_data(raw, reconcile_result) -> dict:
     """
     Overwrite fields on `raw` (a RawData from fetch_raw) with SEC filing data
@@ -214,27 +298,10 @@ def apply_filing_data(raw, reconcile_result) -> dict:
             return f"latest 10-Q/10-K{when}"
         return f"{p.source_name} (SEC data unavailable for this field)"
 
-    # Some filers tag share counts in millions (MCD files 712.3, not 712,300,000).
-    # A filing count more than 10x away from Yahoo's is a scaling error, not a
-    # real difference, so fall back to Yahoo's count.
-    yahoo_shares = raw.diluted_shares
-    if (pref is not None and math.isfinite(pref.diluted_shares) and pref.diluted_shares > 0
-            and yahoo_shares > 0 and not 0.1 < pref.diluted_shares / yahoo_shares < 10):
-        mark("diluted_shares", YAHOO,
-             f"The filing share count ({pref.diluted_shares:,.0f}) is more than 10x away from "
-             f"Yahoo's ({yahoo_shares:,.0f}), so it looks mis-scaled.")
-        shares_from_filing = False
-    elif pref is not None and math.isfinite(pref.diluted_shares) and pref.diluted_shares > 0:
-        raw.diluted_shares = float(pref.diluted_shares)
-        src = EDGAR if pref.source_name == "EDGAR" else pref.source_name
-        mark("diluted_shares", src, _pref_detail(pref, "shares") +
-             (", diluted weighted-average shares" if pref.source_name == "EDGAR" else ""))
-        shares_from_filing = pref.source_name == "EDGAR"
-    else:
-        mark("diluted_shares", YAHOO, edgar_reason or "Share count not found in the filings.")
-        shares_from_filing = False
+    shares_from_filing = _apply_share_count(raw, pref, edgar, edgar_reason, mark, _pref_detail)
 
-    if pref is not None and math.isfinite(pref.total_debt) and pref.total_debt >= 0:
+    if (pref is not None and getattr(pref, "debt_ex_leases", True)
+            and math.isfinite(pref.total_debt) and pref.total_debt >= 0):
         raw.total_debt = float(pref.total_debt)   # already standardised by the source fetcher
         mark("total_debt", EDGAR if pref.source_name == "EDGAR" else pref.source_name,
              _pref_detail(pref, "debt") + "; bonds, loans, commercial paper and finance leases "
