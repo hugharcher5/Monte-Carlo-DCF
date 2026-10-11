@@ -1,20 +1,22 @@
 """
-Point-in-time RawData constructor for S22's DCF signal.
+Point-in-time inputs for S22's DCF signals.
 
-Reuses the DCF engine's existing PURE computation chain completely unmodified:
-    raw = build_pit_rawdata(...)          # <- the only new piece
-    drvrs = compute_drivers(raw)          # existing, unmodified
-    wacc_r = compute_wacc(raw, drvrs, as_of=t)  # existing + additive as_of param
-    base = _build_base(raw, drvrs, wacc_r)      # existing, unmodified
-    dcf_value = dcf.value(base)                 # existing, unmodified
+build_pit_rawdata() turns SEC filings published on or before the rebalance
+date into the same RawData object the live tool gets from Yahoo, so the live
+engine (dcf/valuation) values it unchanged.
 
-Deterministic margin-of-safety is used as the ranking signal (not the full
-Monte Carlo probability-of-undervaluation) -- confirmed with the user as the
-computationally feasible choice: one clean calc per (ticker, quarter), no
-10,000-path simulation loop.
+pit_dcf_signals() runs the current model on it:
+    mos_base  (base-case value - price) / price
+    mos_p50   (Monte Carlo P50 - price) / price
+    p_above   share of simulated scenarios above the price
+The Monte Carlo uses 1,000 scenarios per stock (enough to rank on), the
+risk-free rate published on or before the date, and base rates fitted only on
+outcomes known by the end of 2014 (dcf/data/base_rates_pre2015.json), so
+nothing from inside the 2015-2020 test window leaks in.
+
+pit_dcf_margin_of_safety() keeps the original July 2026 call signature for
+run.py and run_intersection.py; it now returns the current model's base case.
 """
-import contextlib
-import io
 import sys
 from pathlib import Path
 
@@ -26,10 +28,14 @@ import pit_facts as PF
 _DCF_DIR = Path(__file__).resolve().parents[2] / "dcf"
 sys.path.insert(0, str(_DCF_DIR))
 from valuation.data import RawData          # noqa: E402
-from valuation.drivers import compute_drivers  # noqa: E402
-from valuation.wacc import compute_wacc     # noqa: E402
-from valuation.montecarlo import _build_base  # noqa: E402
-from valuation import dcf as dcf_module     # noqa: E402
+from valuation.gates import NotApplicable   # noqa: E402
+from valuation.montecarlo import run_valuation  # noqa: E402
+from valuation.priors import BASE_RATES_PRE2015, load_base_rates  # noqa: E402
+
+N_SIMS = 1_000
+# SIC codes for banks, insurers, brokers and financial holding companies.  The
+# live tool refuses these (valuation/gates.py), so the backtest does too.
+FINANCIAL_SIC = range(6000, 6800)
 
 
 def build_pit_rawdata(ticker: str, cik: int, as_of: pd.Timestamp,
@@ -94,29 +100,41 @@ def build_pit_rawdata(ticker: str, cik: int, as_of: pd.Timestamp,
     )
 
 
-def pit_dcf_margin_of_safety(ticker: str, cik: int, as_of: pd.Timestamp,
-                              price: float, shares: float, beta: float) -> float | None:
-    """Returns (dcf_value_per_share - price) / price, or None if infeasible or
-    if the DCF's own applicability gate (reused verbatim from montecarlo.py's
-    run_valuation -- terminal FCFF > 0 and base-case intrinsic > 0) fails."""
+def is_financial(sic) -> bool:
+    try:
+        return int(float(sic)) in FINANCIAL_SIC
+    except (TypeError, ValueError):
+        return False
+
+
+def pit_dcf_signals(ticker: str, cik: int, as_of: pd.Timestamp, price: float, shares: float,
+                    beta: float, sic=None, n_sims: int = N_SIMS) -> dict | None:
+    """The three DCF signals, or None when the model does not apply (financials,
+    missing inputs, non-positive terminal cash flow or base-case value)."""
+    if is_financial(sic):
+        return None
     raw = build_pit_rawdata(ticker, cik, as_of, price, shares, beta)
     if raw is None:
         return None
+    raw.valuation_date = as_of
     try:
-        # compute_drivers/compute_wacc print verbose diagnostic tables (their
-        # existing, unmodified behavior) -- suppressed here at the call site
-        # only, since this runs thousands of times across the backtest.
-        with contextlib.redirect_stdout(io.StringIO()):
-            drvrs = compute_drivers(raw)
-            wacc_r = compute_wacc(raw, drvrs, as_of=as_of)
-            base = _build_base(raw, drvrs, wacc_r)
-            dcf_r = dcf_module.detailed_value(base)
-    except Exception:
+        r = run_valuation(ticker, n_sims=n_sims, raw=raw, as_of=as_of,
+                          base_rates=load_base_rates(BASE_RATES_PRE2015), light=True)
+    except (NotApplicable, ValueError, ZeroDivisionError, FloatingPointError, KeyError, IndexError):
         return None
+    if not r.dcf_applicable:
+        return None
+    if n_sims <= 0:
+        return {"mos_base": (r.dcf.value_per_share_usd - price) / price}
+    if not np.isfinite(r.p50):
+        return None
+    return {"mos_base": (r.dcf.value_per_share_usd - price) / price,
+            "mos_p50": (r.p50 - price) / price,
+            "p_above": r.pct_undervalued / 100.0}
 
-    terminal_fcff = float(dcf_r.forecast["FCFF"].iloc[-1])
-    dcf_value = dcf_r.value_per_share_usd
-    dcf_applicable = terminal_fcff > 0 and dcf_value > 0
-    if not dcf_applicable or not np.isfinite(dcf_value):
-        return None
-    return (dcf_value - price) / price
+
+def pit_dcf_margin_of_safety(ticker: str, cik: int, as_of: pd.Timestamp,
+                              price: float, shares: float, beta: float) -> float | None:
+    """Base-case margin of safety from the current model (no simulation)."""
+    s = pit_dcf_signals(ticker, cik, as_of, price, shares, beta, n_sims=0)
+    return None if s is None else s["mos_base"]

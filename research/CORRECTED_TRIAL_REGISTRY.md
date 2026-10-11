@@ -6,7 +6,7 @@ Before creating any new registry-style file (`*_TRIAL_REGISTRY.md`,
 first — do not create a fourth. See the consolidation note below and the root
 `CLAUDE.md` for the canonical-file rule.
 
-**Generated:** 2026-07-06 · **Last consolidated:** 2026-07-12 (backfilled through trial #26) · **Updated:** 2026-07-14 (added trial #27, S21; trial #28, S22)
+**Generated:** 2026-07-06 · **Last consolidated:** 2026-07-12 (backfilled through trial #26) · **Updated:** 2026-07-14 (added trial #27, S21; trial #28, S22) · 2026-10-11 (S22 v2 rerun, trial #28 updated in place)
 **Verified against:** source files in `/mnt/c/Users/user/Archer-Capital/research/`, cross-checked against `research/trial_registry.csv`
 **In-sample window:** 2015-01-01 → 2021-01-01 for the original 15-trial program (individual trials from #14 onward use their own windows — noted per trial; several extend to 2023 or use annual-cycle designs)
 **DSR gate:** Deflated Sharpe Ratio, cumulative independent-trial count
@@ -85,7 +85,7 @@ N_TRIALS counts cumulative independent trials; family members reuse the same tri
 | 25 | S19 | 52-week-high anchoring (George & Hwang 2004) | 25 | 72 (monthly) | 0.2063 | 0.715 | FAIL |
 | 26 | S20 | Institutional 13F "smart money" accumulation | 26 | n/a (Phase 1 stop) | n/a | n/a | STOP (CUSIP crosswalk vendor quota exhausted, not a data-existence gap) |
 | 27 | S21 | Cluster-conditioned short-term mean reversion (basket Z-score) | 27 | 60 (monthly, basket book) | 0.2306 | 0.799 | FAIL (per-period SR −5.026 — real gross Sharpe 0.95, destroyed by ~110%/yr cost drag) |
-| 28 | S22 | Long-only valuation portfolios: DCF/P-E/P-S/P-B (4 sub-trials, shared slot) | 28 | 24 (quarterly) | 0.3680 | 0.736 | All FAIL, both original AND fairness-corrected intersection-universe re-run — all four statistically indistinguishable once compared fairly (see Section 4) |
+| 28 | S22 | Long-only valuation portfolios: DCF/P-E/P-S/P-B (4 sub-trials, shared slot) | 28 | 24 (quarterly) | 0.3680 | 0.736 | All FAIL: original, intersection re-run, and v2 rerun on the current model with adjusted prices (2026-10-11, adds two Monte Carlo variants) — none distinguishable from the others (see Section 4) |
 
 *S15's own per-period-SR threshold is `norm.ppf(1-1/19)/sqrt(24)` ≈ 0.297; the trial's actual per-period SR (−0.035) fails by a wide margin regardless of the exact threshold value quoted in different source notes.
 
@@ -585,6 +585,45 @@ All numbers from source files; `[BUG-PENDING]` marks values contaminated by the 
 - **Is the original conclusion robust? No — the specific ranking is not, but the higher-level verdict is, and comes back stronger.** The original "P/S beats DCF, simple beats complex" finding was substantially an artifact of DCF and P/E being evaluated on a smaller, easier (more-established/profitable) subset of the universe than P/S and P/B. Once all four are forced to compete on the identical opportunity set, **no signal is distinguishable from any other** — same Sharpe tier, same alpha tier, same DSR failure, and the "best IC" signal changes depending on which universe you evaluate on. That is itself a more damning finding for the DCF specifically: its added complexity (a new PIT data pipeline, WACC reconstruction, applicability gating) bought it exactly nothing once the universe is held fixed — it does not outperform, and does not underperform, P/E/P/S/P/B on a fair basis. All four are equally weak, interchangeable signals in this universe/window.
 - **Source:** `research/valuationcompare_S22/{run.py, run_intersection.py, pit_facts.py, dcf_adapter.py, finalize_and_log.py}`, `research/valuationcompare_S22/results/s22_{dcf,pe,ps,pb}_{period_returns,sector,intersection,full_crosscheck}.csv`, `s22_all_signal_snapshots.csv`, `s22_intersection_metrics.json`, `dcf/valuation/wacc.py` (additive `as_of` patch + FRED memoization fix, both backward-compatible), `research/trial_registry.csv` (study=`valuationcompare_S22_{dcf,pe,ps,pb}`, trial #28, shared DSR slot — the intersection re-analysis is a robustness check on the same registered trial, not a new trial number).
 - **Verdict:** All four **FAIL** the Sharpe≥0.8/CALMAR~1 target and **FAIL DSR at N=28**, on both the original and the intersection universe. The originally-reported ranking (P/S > DCF > P/E ≈ P/B) does **not** survive a fair, equal-universe comparison — on the intersection universe all four are statistically indistinguishable (Sharpe 0.41–0.43, alpha vs. market −3.7% to −4.2%, IC t-stats all under 1 and their relative order inverts depending on universe). The honest conclusion is not "simple beats complex" but **"none of the four is distinguishable from the others, and the DCF's substantial added complexity bought no measurable edge over the cheapest ratio once compared fairly."**
+
+### S22 v2 — rerun on the current DCF model (2026-10-11, same trial #28)
+
+Rerun of the same registered trial, not a new one (same hypothesis, universe, window, portfolio rule and cost model; S1 v2 precedent: the CSV rows were updated in place). Changes from July:
+
+- **Current model** (`dcf/valuation` at commit 0b3e579): base rates and shrinkage, narrow terminal growth, stub/mid-year timing. Base rates refitted only on outcomes known by 2014-12-31 (`dcf/data/base_rates_pre2015.json`); risk-free rate is the one published on or before each rebalance date.
+- **Two Monte Carlo variants** added as family members sharing slot #28: MC P50 margin of safety and share of 1,000 scenarios above price. N_TRIALS kept at 28 under the family-sharing convention.
+- **Adjusted prices for returns.** July used raw closes; 23 stock-quarters differed from adjusted returns by more than 20 points (e.g. ACLS 2016-Q2 raw +290% vs adjusted −2%; MTW 2017-Q4 raw +332% vs +8%). List in `results/v2/split_check.csv`. The shared `gp_industry_neutral/run.py` was not changed, so other trials using its raw-close `compute_returns` may carry the same error; worth checking.
+- **Financials (SIC 6000–6799) excluded** from DCF scores, as the live tool refuses them, so they leave the common list for every signal.
+- **Benchmark:** the common list held equally, rebalanced quarterly, after the same costs. The July "universe" comparison was before costs.
+
+Common list: mean 178 stocks/quarter; each portfolio holds ~36.
+
+| Signal | Return/yr (net) | Sharpe | Worst fall | Calmar | Mean IC | FF3+Mom alpha/yr | DSR |
+|---|---|---|---|---|---|---|---|
+| DCF base case | +13.153% | 0.51 | -46% | 0.29 | +0.019 | +1.31% (t 0.16) | FAIL (0.254 < 0.368) |
+| DCF MC P50 | +12.872% | 0.49 | -48% | 0.27 | +0.024 | +0.74% (t 0.09) | FAIL (0.247 < 0.368) |
+| DCF share above price | +10.690% | 0.46 | -47% | 0.23 | +0.027 | -1.14% (t -0.17) | FAIL (0.230 < 0.368) |
+| P/E | +10.341% | 0.44 | -55% | 0.19 | +0.020 | -0.03% (t -0.00) | FAIL (0.218 < 0.368) |
+| P/S | +12.010% | 0.47 | -55% | 0.22 | +0.010 | +0.40% (t 0.05) | FAIL (0.236 < 0.368) |
+| P/B | +9.350% | 0.42 | -54% | 0.17 | -0.010 | -1.14% (t -0.17) | FAIL (0.209 < 0.368) |
+| Benchmark (common list, after costs) | +11.769% | 0.52 | -39% | 0.30 | n/a | +0.32% | n/a |
+
+Paired bootstrap (24 quarters, 10,000 resamples):
+
+| DCF signal − ratio | Mean gap/yr | 95% range | Share of resamples DCF no better |
+|---|---|---|---|
+| dcf − pe | +1.85% | -4.2% to +7.3% | 0.26 |
+| dcf − ps | -0.82% | -5.7% to +4.3% | 0.63 |
+| dcf − pb | +1.91% | -3.7% to +7.4% | 0.25 |
+| dcf_mc − pe | +2.13% | -4.0% to +8.0% | 0.23 |
+| dcf_mc − ps | -0.54% | -4.8% to +3.9% | 0.61 |
+| dcf_mc − pb | +2.18% | -3.4% to +7.6% | 0.22 |
+| dcf_pu − pe | -1.01% | -7.3% to +4.5% | 0.61 |
+| dcf_pu − ps | -3.68% | -11.3% to +3.4% | 0.84 |
+| dcf_pu − pb | -0.95% | -8.1% to +6.1% | 0.60 |
+
+- **Verdict:** all six **FAIL DSR at N=28**. The DCF base case is first on return, Sharpe and worst fall, but every bootstrap interval includes zero and no factor alpha is distinguishable from zero (|t| < 0.2). Portfolio returns correlate 0.98–0.998. The Monte Carlo signals add nothing over the base case. Conclusion unchanged from July in substance: no signal is distinguishable from the others; the DCF is at least as good as the ratios on this sample.
+- **Source:** `research/valuationcompare_S22/{rerun_v2.py, analyze_v2.py, dcf_adapter.py}`, `results/v2/`, `rerun_v2_output.log`.
 
 ---
 

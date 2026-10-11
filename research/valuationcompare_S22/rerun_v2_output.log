@@ -1,0 +1,56 @@
+[load] universe, prices and filings
+[Tiingo] Loaded 15,620 tickers from cache.
+[PreFilter] 6,692 screened, 3,300 survivors.
+[Preload] Raw prices: 3,300 tickers in 10.9s
+[AdjPreload] 3,300 tickers in 2.0s
+[Preload] GP facts: 2,010/3,300 CIKs in 2.7s
+[S22Facts] 2,010/3,300 loaded from trimmed cache in 74.0s
+  [Universe] 2015-01-01 -> 354 names
+[01/24] 2015-01-01 universe=354 common=167 bench=+3.6% dcf=+7.9% dcf_mc=+5.6% dcf_pu=+4.9% pe=+2.7% ps=+3.7% pb=+2.5% (4s)
+  [Universe] 2015-04-01 -> 349 names
+[02/24] 2015-04-01 universe=349 common=166 bench=+0.4% dcf=+1.5% dcf_mc=+2.1% dcf_pu=-4.1% pe=-0.7% ps=+1.4% pb=+0.8% (3s)
+  [Universe] 2015-07-01 -> 390 names
+[03/24] 2015-07-01 universe=390 common=178 bench=-13.4% dcf=-13.1% dcf_mc=-11.9% dcf_pu=-12.0% pe=-14.4% ps=-16.6% pb=-17.9% (3s)
+  [Universe] 2015-10-01 -> 417 names
+[04/24] 2015-10-01 universe=417 common=204 bench=+5.1% dcf=+5.7% dcf_mc=+5.3% dcf_pu=+5.1% pe=+6.3% ps=+5.9% pb=+3.6% (4s)
+  [Universe] 2016-01-01 -> 397 names
+[05/24] 2016-01-01 universe=397 common=191 bench=+7.0% dcf=+8.3% dcf_mc=+8.6% dcf_pu=+8.3% pe=+5.9% ps=+10.5% pb=+4.6% (3s)
+  [Universe] 2016-04-01 -> 401 names
+[06/24] 2016-04-01 universe=401 common=185 bench=+4.6% dcf=+10.5% dcf_mc=+10.4% dcf_pu=+5.3% pe=+5.3% ps=+9.9% pb=+11.5% (3s)
+  [Universe] 2016-07-01 -> 411 names
+[07/24] 2016-07-01 universe=411 common=179 bench=+7.9% dcf=+10.2% dcf_mc=+11.2% dcf_pu=+6.2% pe=+8.5% ps=+14.0% pb=+12.0% (3s)
+  [Universe] 2016-10-01 -> 388 names
+[08/24] 2016-10-01 universe=388 common=169 bench=+10.5% dcf=+12.6% dcf_mc=+12.2% dcf_pu=+12.8% pe=+14.3% ps=+15.0% pb=+17.2% (3s)
+  [Universe] 2017-01-01 -> 382 names
+[09/24] 2017-01-01 universe=382 common=164 bench=-0.4% dcf=-4.2% dcf_mc=-3.9% dcf_pu=-2.2% pe=+0.4% ps=-3.1% pb=+0.6% (3s)
+  [Universe] 2017-04-01 -> 401 names
+[10/24] 2017-04-01 universe=401 common=177 bench=+4.3% dcf=-2.6% dcf_mc=-2.6% dcf_pu=+1.3% pe=-0.2% ps=-4.4% pb=-4.8% (3s)
+  [Universe] 2017-07-01 -> 427 names
+[11/24] 2017-07-01 universe=427 common=184 bench=+4.3% dcf=+1.8% dcf_mc=+1.2% dcf_pu=+0.7% pe=+4.7% ps=+2.2% pb=+1.1% (4s)
+  [Universe] 2017-10-01 -> 396 names
+[12/24] 2017-10-01 universe=396 common=172 bench=+3.7% dcf=+6.9% dcf_mc=+6.3% dcf_pu=+5.1% pe=+5.5% ps=+9.5% pb=+6.4% (3s)
+  [Universe] 2018-01-01 -> 417 names
+[13/24] 2018-01-01 universe=417 common=178 bench=-2.1% dcf=-6.5% dcf_mc=-6.5% dcf_pu=-2.5% pe=-3.5% ps=-3.7% pb=-3.6% (3s)
+  [Universe] 2018-04-01 -> 429 names
+[14/24] 2018-04-01 universe=429 common=178 bench=+11.5% dcf=+14.3% dcf_mc=+14.1% dcf_pu=+17.8% pe=+13.1% ps=+13.2% pb=+11.6% (3s)
+  [Universe] 2018-07-01 -> 444 names
+[15/24] 2018-07-01 universe=444 common=170 bench=-0.2% dcf=-4.3% dcf_mc=-3.0% dcf_pu=-3.4% pe=-10.9% ps=-4.9% pb=-0.6% (4s)
+  [Universe] 2018-10-01 -> 428 names
+[16/24] 2018-10-01 universe=428 common=158 bench=-17.3% dcf=-18.1% dcf_mc=-18.1% dcf_pu=-20.0% pe=-22.0% ps=-19.8% pb=-22.0% (3s)
+  [Universe] 2019-01-01 -> 465 names
+[17/24] 2019-01-01 universe=465 common=184 bench=+13.1% dcf=+12.7% dcf_mc=+12.1% dcf_pu=+10.7% pe=+10.3% ps=+10.9% pb=+12.9% (4s)
+  [Universe] 2019-04-01 -> 438 names
+[18/24] 2019-04-01 universe=438 common=165 bench=-4.0% dcf=-10.3% dcf_mc=-10.2% dcf_pu=-10.7% pe=-10.6% ps=-10.2% pb=-12.4% (4s)
+  [Universe] 2019-07-01 -> 451 names
+[19/24] 2019-07-01 universe=451 common=171 bench=-2.6% dcf=+2.8% dcf_mc=+3.3% dcf_pu=+1.7% pe=+1.4% ps=-2.4% pb=-0.3% (4s)
+  [Universe] 2019-10-01 -> 447 names
+[20/24] 2019-10-01 universe=447 common=169 bench=+13.5% dcf=+11.0% dcf_mc=+9.1% dcf_pu=+12.1% pe=+12.1% ps=+13.6% pb=+13.7% (4s)
+  [Universe] 2020-01-01 -> 423 names
+[21/24] 2020-01-01 universe=423 common=159 bench=-38.1% dcf=-39.8% dcf_mc=-42.3% dcf_pu=-39.1% pe=-41.7% ps=-46.9% pb=-46.8% (4s)
+  [Universe] 2020-04-01 -> 506 names
+[22/24] 2020-04-01 universe=506 common=223 bench=+44.6% dcf=+60.4% dcf_mc=+64.6% dcf_pu=+52.9% pe=+57.6% ps=+65.9% pb=+58.7% (4s)
+  [Universe] 2020-07-01 -> 486 names
+[23/24] 2020-07-01 universe=486 common=192 bench=+7.5% dcf=+9.4% dcf_mc=+9.9% dcf_pu=+10.9% pe=+11.3% ps=+13.3% pb=+9.1% (4s)
+  [Universe] 2020-10-01 -> 483 names
+[24/24] 2020-10-01 universe=483 common=182 bench=+31.9% dcf=+35.5% dcf_mc=+37.0% dcf_pu=+33.8% pe=+46.3% ps=+40.5% pb=+43.4% (4s)
+[saved] /mnt/c/Users/user/Archer-Capital/research/valuationcompare_S22/results/v2  (23 stock-quarters where raw and adjusted returns differ by >20 points)
