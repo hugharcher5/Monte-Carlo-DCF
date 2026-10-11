@@ -2522,21 +2522,6 @@ with tab_valuation:
 # ══════════════════════════════════════════════════════════════════════════════
 
 with tab_strategies:
-    from strategies.dcf_tests.page import render_dcf_tests_page
     from strategies.valuation_compare.page import render_valuation_compare_page
 
-    _SECTIONS = [
-        "DCF Tests: DCF vs. multiples, quality, Monte Carlo dispersion",
-        "DCF vs. P/E vs. P/S vs. P/B (S22)",
-    ]
-
-    selected = st.selectbox(
-        "Select research",
-        options=_SECTIONS,
-        key="strategy_select",
-    )
-
-    if selected == _SECTIONS[0]:
-        render_dcf_tests_page()
-    else:
-        render_valuation_compare_page()
+    render_valuation_compare_page()

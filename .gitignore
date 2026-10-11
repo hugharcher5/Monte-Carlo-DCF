@@ -22,3 +22,6 @@ research/*/cache/
 cache/
 *.pkl
 *.json
+
+# Claude Code agent worktrees (local only)
+.claude/worktrees/
