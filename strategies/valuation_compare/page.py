@@ -149,15 +149,21 @@ def _load(kind: str) -> dict[str, pd.DataFrame]:
             for s, _, _ in _SIGNALS}
 
 
-def _metrics(df: pd.DataFrame) -> dict:
-    net = df["ret_net"]
-    growth = (1 + net).cumprod()
+def _metrics(df: pd.DataFrame, col: str = "ret_net") -> dict:
+    """Quarterly returns → annual return, Sharpe, worst fall and Calmar.
+    col='mkt_ret' gives the equal-weight universe, which ranks nothing."""
+    r = df[col]
+    growth = pd.concat([pd.Series([1.0]), (1 + r).cumprod()], ignore_index=True)
+    annual = growth.iloc[-1] ** (4 / len(r)) - 1
+    worst = (growth / growth.cummax() - 1).min()
+    ranked = col == "ret_net"
     return {
-        "Return a year (after costs)": f"{growth.iloc[-1] ** (4 / len(net)) - 1:+.1%}",
-        "Sharpe ratio": f"{net.mean() / net.std() * 2:.2f}",
-        "Worst fall": f"{(growth / growth.cummax() - 1).min():.0%}",
-        "Ranking accuracy (IC)": f"{df['ic'].mean():+.3f}",
-        "Quarters beating the market": f"{(net > df['mkt_ret']).mean():.0%}",
+        "Return a year": f"{annual:+.1%}",
+        "Sharpe ratio": f"{r.mean() / r.std() * 2:.2f}",
+        "Worst fall": f"{worst:.0%}",
+        "Calmar ratio": f"{annual / abs(worst):.2f}" if worst < 0 else "n/a",
+        "Ranking accuracy (IC)": f"{df['ic'].mean():+.3f}" if ranked else "n/a",
+        "Quarters beating the market": f"{(r > df['mkt_ret']).mean():.0%}" if ranked else "n/a",
     }
 
 
@@ -211,6 +217,27 @@ def render_valuation_compare_page() -> None:
         "held equally."
     )
 
+    st.markdown(
+        "**How we made it a fair test.**\n"
+        "- **No survivorship bias.** A backtest that only uses companies still listed today "
+        "quietly drops every firm that went bankrupt, was delisted or was taken over, so it "
+        "only sees the survivors and its returns look better than they were. To avoid that, "
+        "this project paid for a Tiingo data subscription, whose price history includes "
+        "companies that no longer trade. Each quarter's universe is rebuilt from the stocks "
+        "that existed then, and a stock that later delisted is held until its last trading day.\n"
+        "- **No look-ahead.** Each quarter uses only filings the SEC had published by that date.\n"
+        "- **Same stocks for every signal.** All four signals rank the same list, so no signal "
+        "gains from choosing among easier companies.\n"
+        "- **Same rules.** The same rebalance dates, portfolio size, equal weighting and "
+        "trading-cost model apply to all four.\n"
+        "- **Adjusted for repeated testing.** This was one of 28 strategies tested, so results "
+        "are judged with a deflated Sharpe ratio that raises the bar for each extra test.\n\n"
+        "One caveat: this test used the DCF as it was in July 2026, valued once per stock "
+        "without the Monte Carlo, with a 20% floor on long-run margins and capital spending "
+        "falling to depreciation. The live tool has changed since, so these results describe "
+        "that earlier version."
+    )
+
     first = _load("period_returns")
     fair = _load("intersection")
     st.markdown("**Sample size** (average per quarter)")
@@ -245,8 +272,14 @@ def render_valuation_compare_page() -> None:
                       yaxis_title="Value of $1", height=420, margin=dict(t=50, b=40),
                       legend=dict(orientation="h", yanchor="top", y=-0.12))
     st.plotly_chart(fig, use_container_width=True)
-    st.dataframe(pd.DataFrame([{"Signal": label, **_metrics(fair[s])} for s, label, _ in _SIGNALS]),
-                 hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(
+        [{"Signal": f"{label} (after costs)", **_metrics(fair[s])} for s, label, _ in _SIGNALS]
+        + [{"Signal": "Whole universe, equal weight (before costs)", **_metrics(fair["dcf"], "mkt_ret")}]
+    ), hide_index=True, use_container_width=True)
+    st.caption(
+        "Calmar ratio = return a year ÷ worst fall. The whole universe holds all ~422 stocks "
+        "equally with no trading costs, so it ranks nothing and is a slightly generous benchmark."
+    )
 
     st.markdown(
         "**Conclusion.** The hypothesis is rejected. On the same stocks, every \\$1 grew to "
