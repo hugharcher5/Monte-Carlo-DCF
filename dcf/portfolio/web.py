@@ -2371,6 +2371,97 @@ def _render_benchmark_study() -> None:
                             "Analysts", "Our P50 vs analysts", "FMP DCF", "Status", "Note"]],
                      hide_index=True, use_container_width=True)
 
+    _render_price_tracking(df)
+
+
+_PRICE_HISTORY_CSV = _DCF_ROOT / "data" / "price_history.csv"
+_GROUPS = [
+    ("Undervalued by both", "seagreen"),
+    ("Undervalued by our DCF only", "steelblue"),
+    ("Undervalued by analysts only", "darkorange"),
+    ("Overvalued by both", "crimson"),
+]
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _load_price_history() -> pd.DataFrame:
+    return pd.read_csv(_PRICE_HISTORY_CSV)
+
+
+def _render_price_tracking(bench: pd.DataFrame) -> None:
+    """Weekly returns since the comparison, grouped by whether our DCF and the
+    analysts called each stock undervalued (fair value above the price)."""
+    if not _PRICE_HISTORY_CSV.exists():
+        st.subheader("How these stocks have done")
+        st.info("Weekly price tracking has not started yet.")
+        return
+    hist = _load_price_history()
+    wide = hist.pivot_table(index="ticker", columns="date", values="close").sort_index(axis=1)
+    dates = list(wide.columns)
+    start = dates[0]
+    st.subheader(f"How these stocks have done since {start}")
+
+    b = bench[bench["status"] == "valued"].dropna(subset=["p50", "price", "analyst_mean"]).set_index("ticker")
+    ours = b["p50"] > b["price"]
+    analysts = b["analyst_mean"] > b["price"]
+    group = pd.Series(np.select(
+        [ours & analysts, ours & ~analysts, ~ours & analysts],
+        [g for g, _ in _GROUPS[:3]], _GROUPS[3][0]), index=b.index)
+
+    rets = wide.div(wide[start], axis=0) - 1          # cumulative return since the start date
+    counts = group.value_counts()
+
+    st.caption(
+        f"Prices are recorded every Saturday from Friday's close by a GitHub Action, starting from "
+        f"the comparison on {start}. Groups use that day's verdicts: a stock is undervalued when "
+        f"our DCF median, or the analyst mean target, is above its price. Group returns are equal "
+        f"weighted. SPY is the market benchmark."
+    )
+    if len(dates) < 2:
+        st.info(f"Only the starting prices from {start} are recorded so far. The first weekly close "
+                "arrives on Saturday, and this section fills in from then.")
+        return
+
+    fig = go.Figure()
+    for name, color in _GROUPS:
+        members = group[group == name].index.intersection(rets.index)
+        if len(members):
+            fig.add_trace(go.Scatter(
+                x=dates, y=rets.loc[members].mean() * 100, mode="lines+markers",
+                name=f"{name} ({len(members)})", line=dict(color=color, width=2),
+                hovertemplate="%{x}: %{y:+.1f}%<extra></extra>",
+            ))
+    if "SPY" in rets.index:
+        fig.add_trace(go.Scatter(
+            x=dates, y=rets.loc["SPY"] * 100, mode="lines", name="SPY (market)",
+            line=dict(color="grey", dash="dash"), hovertemplate="%{x}: %{y:+.1f}%<extra></extra>",
+        ))
+    fig.add_hline(y=0, line_color="grey", line_width=1)
+    fig.update_layout(
+        title=f"Average return since {start} by verdict",
+        xaxis_title="Week", yaxis_title="Return since start (%)", height=420,
+        margin=dict(t=50, b=40), legend=dict(orientation="h", yanchor="top", y=-0.2),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    latest = rets[dates[-1]]
+    summary = pd.DataFrame([
+        {"Group": name, "Stocks": int(counts.get(name, 0)),
+         "Average return": f"{latest.reindex(group[group == name].index).mean():+.1%}"}
+        for name, _ in _GROUPS
+    ] + ([{"Group": "SPY (market)", "Stocks": 1, "Average return": f"{latest['SPY']:+.1%}"}]
+         if "SPY" in latest.index else []))
+    st.dataframe(summary, hide_index=True, use_container_width=False)
+
+    table = (rets[dates[1:]] * 100).round(1).reindex(group.index)
+    table.columns = [f"{d} (%)" for d in dates[1:]]
+    table.insert(0, "Start price", wide[start].reindex(group.index).map("${:,.2f}".format))
+    table.insert(0, "Verdict", group)
+    order = {g: i for i, (g, _) in enumerate(_GROUPS)}
+    table = table.sort_values(["Verdict", table.columns[-1]], key=lambda s: s.map(order) if s.name == "Verdict" else -s)
+    with st.expander(f"Weekly change for each stock since {start}"):
+        st.dataframe(table.rename_axis("Ticker").reset_index(), hide_index=True, use_container_width=True)
+
 
 # ── Valuation tab layout ──────────────────────────────────────────────────────
 

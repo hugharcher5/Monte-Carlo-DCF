@@ -1,0 +1,35 @@
+name: Track Benchmark Prices
+
+# Records each Friday's close for the 100 stocks in the analyst comparison
+# (dcf/data/analyst_benchmark.csv), plus SPY, so the app can show whether stocks
+# that both our DCF and analysts call undervalued actually do better.
+# The weekly commit also keeps the repo active, so GitHub doesn't pause the
+# scheduled workflows after 60 days.
+on:
+  schedule:
+    # Saturday 06:00 UTC, after Friday's close has settled on Yahoo
+    - cron: '0 6 * * 6'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install yfinance pandas
+      - run: python scripts/track_prices.py
+      - name: Commit the new prices
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add dcf/data/price_history.csv
+          git diff --cached --quiet && exit 0
+          git commit -m "Record weekly closes for the 100-stock comparison"
+          git push
