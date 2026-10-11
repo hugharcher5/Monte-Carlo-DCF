@@ -8,9 +8,8 @@ Usage:
 from __future__ import annotations
 import sys
 import math
-from valuation.montecarlo import run_valuation
+from valuation.pipeline   import value_ticker
 from valuation.result     import ValuationResult
-from valuation.dcf        import TERMINAL_G, HIGH_GROWTH_THRESHOLD, MATURE_MARGIN_DEFAULT
 
 
 # ── Print helpers ─────────────────────────────────────────────────────────────
@@ -33,21 +32,23 @@ def _print_assumptions(r: ValuationResult) -> None:
     print(f"  Starting revenue    : {ccy} {a.start_revenue/1e9:.3f}B   (most recent fiscal year)")
     print(f"  Revenue growth yr 1 : {a.revenue_growth:.2%}   → fades linearly to {a.terminal_g:.2%} by yr {a.forecast_years}")
     print(f"  EBIT margin (start) : {a.ebit_margin:.2%}   → fades linearly to {a.target_margin:.2%} (target) by yr {a.forecast_years}")
-    print(f"  Target EBIT margin  : {a.target_margin:.2%}   [= max(best historical, {MATURE_MARGIN_DEFAULT:.0%} default)]")
+    print(f"  Target EBIT margin  : {a.target_margin:.2%}   [{r.target_margin_basis}]")
     print(f"  Tax rate            : {a.tax_rate:.2%}")
-    capex_end = a.da_pct if a.capex_pct > a.da_pct else a.capex_pct
-    fade_note = f"→ fades to {capex_end:.2%} (= D&A%) by yr {a.forecast_years}" if a.capex_pct > a.da_pct else "no fade needed (≤ D&A%)"
+    capex_end = r.dcf.forecast['CapEx%'].iloc[-1]
+    fade_note = (f"→ {capex_end:.2%} by yr {a.forecast_years} (net reinvestment scaled to what terminal growth needs)"
+                 if abs(capex_end - a.capex_pct) > 1e-4 else "held (CapEx ≤ D&A, or growth already at terminal rate)")
     print(f"  D&A / Revenue       : {a.da_pct:.2%}   (held constant)")
     print(f"  CapEx / Revenue     : {a.capex_pct:.2%}   {fade_note}")
     print(f"  NWC / Revenue       : {a.nwc_pct:.2%}")
     print(f"  Terminal growth (g) : {a.terminal_g:.2%}")
     print(f"  WACC                : {a.wacc:.3%}")
+    print(f"  Valuation date      : {r.valuation_date.date()}  ({a.stub:.0%} of forecast year 1 still to come; mid-year discounting)")
     print()
     print(f"  Net debt            : {ccy} {a.net_debt/1e9:.3f}B   (total debt − cash)")
-    print(f"  Diluted shares      : {a.diluted_shares/1e9:.3f}B")
+    print(f"  Diluted shares      : {a.diluted_shares/1e9:.3f}B   (source: {r.data_provenance.get('diluted_shares', {}).get('source', 'Yahoo')})")
     print()
     print(f"  SBC treatment       : Route 1 — SBC is expensed in EBIT; not added back to FCFF.")
-    print(f"                        Current diluted shares used; no future SBC dilution modelled.")
+    print(f"                        Today's diluted shares used; no future SBC dilution modelled.")
 
 
 def _print_forecast(r: ValuationResult) -> None:
@@ -64,9 +65,9 @@ def _print_forecast(r: ValuationResult) -> None:
     da_pct       = a.da_pct
 
     if abs(capex_start - capex_end) > 0.001:
-        print(f"\n  CapEx% fades {capex_start:.2%} → {capex_end:.2%} (= D&A% {da_pct:.2%}) — maintenance reinvestment in terminal year")
+        print(f"\n  CapEx% fades {capex_start:.2%} → {capex_end:.2%} (D&A is {da_pct:.2%}); net reinvestment shrinks to what terminal growth needs")
     else:
-        print(f"\n  CapEx% held constant at {capex_start:.2%} (already ≤ D&A% {da_pct:.2%})")
+        print(f"\n  CapEx% held at {capex_start:.2%} (D&A is {da_pct:.2%})")
     if abs(margin_start - margin_end) > 0.001:
         print(f"  EBIT margin fades {margin_start:.2%} → {margin_end:.2%} by yr {a.forecast_years}")
     else:
@@ -192,7 +193,12 @@ def run_dcf(ticker: str) -> None:
     print(f"  DCF VALUATION — {ticker.upper()}")
     print(f"{'#'*60}")
 
-    r = run_valuation(ticker, n_sims=0)
+    from valuation.gates import NotApplicable
+    try:
+        r, _ = value_ticker(ticker, n_sims=0)
+    except NotApplicable as e:
+        print(f"\n  {e}")
+        return
 
     _print_assumptions(r)
     _print_forecast(r)

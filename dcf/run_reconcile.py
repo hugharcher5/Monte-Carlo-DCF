@@ -87,7 +87,7 @@ def run_reconcile(ticker: str, skip_fmp: bool = False, skip_edgar: bool = False)
     try:
         yahoo = fetch_yahoo(ticker)
         sources.append(yahoo)
-    except Exception as e:
+    except (RuntimeError, ValueError, KeyError, OSError) as e:
         console.print(f"  [red]Yahoo fetch failed: {e}[/red]")
         return
 
@@ -198,7 +198,7 @@ def run_reconcile(ticker: str, skip_fmp: bool = False, skip_edgar: bool = False)
         )
 
     if result.sigma_cross:
-        console.print("\n  [bold]σ_cross (DATA fields → MC widening):[/bold]")
+        console.print("\n  [bold]σ_cross (robust spread across sources; debt is definitional, so net debt reflects cash only):[/bold]")
         for var, sig in sorted(result.sigma_cross.items()):
             console.print(f"    {var:<20}  σ = {sig:.4f}")
     console.print()
