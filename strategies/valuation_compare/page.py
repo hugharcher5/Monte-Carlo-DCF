@@ -158,7 +158,7 @@ def _metrics(df: pd.DataFrame, col: str = "ret_net") -> dict:
     worst = (growth / growth.cummax() - 1).min()
     ranked = col == "ret_net"
     return {
-        "Return a year": f"{annual:+.1%}",
+        "Return a year": f"{annual:+.3%}",   # 3 dp: three signals agree to 0.1pp
         "Sharpe ratio": f"{r.mean() / r.std() * 2:.2f}",
         "Worst fall": f"{worst:.0%}",
         "Calmar ratio": f"{annual / abs(worst):.2f}" if worst < 0 else "n/a",
