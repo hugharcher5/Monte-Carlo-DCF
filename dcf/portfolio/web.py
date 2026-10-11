@@ -1905,7 +1905,7 @@ def _render_gap_paragraph(r: ValuationResult) -> None:
 
     price = ga['price']
     p50, p10, p90 = ga['p50'], ga['p10'], ga['p90']
-    gap_abs = abs(ga['gap_pct'])
+    gap_abs = abs(p50 - price) / price if price > 0 else abs(ga['gap_pct'])   # model vs price, as a share of price
     pvr     = ga['pvr']
     is_over = ga['is_over']
     solves  = ga['solves']
