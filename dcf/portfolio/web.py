@@ -49,7 +49,7 @@ def _show_error(ticker: str, exc: Exception) -> None:
 
 
 with tab_valuation:
-    ticker_input = st.text_input("Ticker symbol", value="MSFT", key="val_ticker")
+    ticker_input = st.text_input("Ticker symbol", value="HD", key="val_ticker")
     if st.button("Run valuation", key="val_run"):
         ticker = ticker_input.upper().strip()
         st.session_state.pop("val_result", None)
@@ -71,9 +71,13 @@ with tab_valuation:
         status = st.session_state.get("val_source_status", {})
         failed = {k: v for k, v in status.items() if v not in ("ok", "skipped")}
         if failed:
-            st.warning(f"Only {len(status) - len(failed)} of {len(status)} data sources were available, "
-                       "so fewer sources were compared. "
-                       + "  ".join(f"**{k}**: {v}" for k, v in failed.items()))
+            note = (f"Compared {len(status) - len(failed)} of {len(status)} data sources. "
+                    + "; ".join(f"{k}: {v}" for k, v in failed.items()) + ".")
+            # FMP's free plan refusing a symbol is routine, so it gets a quiet note.
+            if set(failed) == {"FMP"}:
+                st.caption(note)
+            else:
+                st.warning(note)
         result = st.session_state["val_result"]
         sub_dcf, sub_analysts = st.tabs(["Our DCF", "Analyst estimates"])
         with sub_dcf:

@@ -138,7 +138,9 @@ def _fmp_get(endpoint: str, symbol: str, api_key: str) -> list[dict]:
             detail = e.read().decode(errors="replace").strip()
         except OSError:
             detail = ""
-        suffix = f": {detail}" if detail else ""
+        if e.code == 402:
+            raise RuntimeError("FMP's free plan doesn't cover this symbol") from e
+        suffix = f": {detail[:200]}" if detail else ""
         raise RuntimeError(f"FMP HTTP {e.code} for {endpoint}{suffix}") from e
     except (OSError, ValueError) as e:
         raise RuntimeError(f"FMP request failed ({endpoint}): {e}") from e

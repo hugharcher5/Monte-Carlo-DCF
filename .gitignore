@@ -28,3 +28,26 @@ cache/
 
 # Model parameter files are small and must be versioned
 !dcf/data/*.json
+
+# Kept locally, not published: personal tooling and earlier research trials.
+# The app's Research tab needs only research/valuationcompare_S22 and the
+# helper it imports from research/gp_industry_neutral.
+CLAUDE.md
+.claude/
+paper_trader/
+backtester/
+signals/
+data_pipelines/
+company_numbers_candidates.csv
+scripts/resolve_company_numbers.py
+/research/*
+!/research/__init__.py
+!/research/valuationcompare_S22/
+!/research/gp_industry_neutral/
+/strategies/*
+!/strategies/__init__.py
+!/strategies/valuation_compare/
+/research/gp_industry_neutral/*
+!/research/gp_industry_neutral/run.py
+dcf/output/
+dcf/config/positions.yaml
