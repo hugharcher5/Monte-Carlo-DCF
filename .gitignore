@@ -28,6 +28,8 @@ cache/
 
 # Model parameter files are small and must be versioned
 !dcf/data/*.json
+# The Research tab reads this metrics file
+!research/valuationcompare_S22/results/v2/s22v2_metrics.json
 
 # Kept locally, not published: personal tooling and earlier research trials.
 # The app's Research tab needs only research/valuationcompare_S22 and the
